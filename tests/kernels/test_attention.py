@@ -2,8 +2,12 @@ import random
 from typing import List, Optional
 
 import torch
-from xformers import ops as xops
-from xformers.ops.fmha.attn_bias import BlockDiagonalCausalMask
+
+from vllm.xformers.ops.fmha.attn_bias import (BlockDiagonalCausalMask,
+                                         LowerTriangularMaskWithTensorBias)
+
+from vllm.xformers.ops.fmha import memory_efficient_attention_forward
+from vllm.xformers.ops.fmha.flash import FwOp
 
 from vllm import attention_ops
 
@@ -266,9 +270,9 @@ def run_multi_query_kv_attention(
     qkv.uniform_(-1e-3, 1e-3)
     query, key, value = qkv.unbind(dim=1)
 
-    attn_op = xops.fmha.cutlass.FwOp()
+    attn_op = FwOp()
     attn_bias = BlockDiagonalCausalMask.from_seqlens(seq_lens)
-    output = xops.memory_efficient_attention_forward(
+    output = memory_efficient_attention_forward(
         query.unsqueeze(0),
         key.unsqueeze(0),
         value.unsqueeze(0),
