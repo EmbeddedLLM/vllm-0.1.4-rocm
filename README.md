@@ -1,3 +1,42 @@
+<h2 align="center">
+ROCm port of vLLM 0.1.4
+</h2>
+
+---
+
+This version of vLLM supports inferencing and serving of llama and vicuna models on AMD GPUs with ROCm. For more details, please see our [blog post]().
+
+---
+
+<h3 align="center">
+Using this project
+</h3>
+
+---
+
+## Pre-requisites
+
+Pytorch with ROCm (5.7.0 or later) support
+- Or alternatively use an equivalent docker image (rocm/pytorch:rocm5.7_ubuntu22.04_py3.10_pytorch_2.0.1)
+
+Install ROCm [flash-attention](https://github.com/ROCmSoftwarePlatform/flash-attention) following the setup instructions in [AMD ROCm Support]((https://github.com/ROCmSoftwarePlatform/flash-attention))
+
+## Installation
+
+Build the repository
+
+```bash
+git clone https://github.com/EmbeddedLLM/vllm-0.1.4-rocm
+cd vllm-0.1.4-rocm/
+python3 setup.py install
+```
+
+## Benchmarking
+
+The benchmark results were obtained by running the vLLM benchmark scripts.
+
+---
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/vllm-project/vllm/main/docs/source/assets/logos/vllm-logo-text-dark.png">
