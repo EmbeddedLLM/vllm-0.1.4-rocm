@@ -378,7 +378,7 @@ class AttentionOpDispatch:
         scale: Optional[float] = None,
     ) -> "AttentionOpDispatch":
         """Here for backward compatibility"""
-        from .dispatch import _dispatch_bw, _dispatch_fw
+        from .dispatch import _dispatch_fw
 
         inp = Inputs(
             query=query,

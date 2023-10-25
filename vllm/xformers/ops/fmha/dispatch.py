@@ -72,12 +72,3 @@ def _dispatch_fw(inp: Inputs, needs_gradient: bool) -> Type[AttentionFwOpBase]:
     return _run_priority_list(
         "memory_efficient_attention_forward", priority_list_ops, inp
     )
-
-
-def _dispatch_bw(inp: Inputs) -> Type[AttentionBwOpBase]:
-    priority_list_ops: List[Type[AttentionBwOpBase]] = [
-        flash.BwOp,
-    ]
-    return _run_priority_list(
-        "memory_efficient_attention_backward", priority_list_ops, inp
-    )
