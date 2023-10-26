@@ -16,8 +16,6 @@ vLLM ROCm port
 
 This version of vLLM supports model inferencing and serving on AMD GPUs with ROCm. This ROCm port was adapted from [vLLM](https://github.com/vllm-project/vllm) v0.1.4 and [xformers](https://github.com/facebookresearch/xformers), replacing the attention forward method employed in xformers by the ROCm realization of [flash attention](https://github.com/ROCmSoftwarePlatform/flash-attention). Currently only LLaMA/Vicuna models have been tested.
 
-For more details on the implementation, please visit our [blog post]().
-
 ---
 
 *Latest News*
@@ -82,7 +80,7 @@ python -m vllm.entrypoints.api_server \
 
 ## Benchmarking
 
-The benchmark results can be obtained by running the vLLM benchmark scripts under the *benchmark* directory. For our benchmark results, please visit our [blog post]() for more details.
+The benchmark results can be obtained by running the vLLM benchmark scripts under the *benchmark* directory.
 
 
 ## Acknowledgement
