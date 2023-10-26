@@ -5,8 +5,7 @@
     <img alt="vLLM" src="docs/source/assets/logos/vllm-logo-text-light.png" width=60%>
   </picture>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/source/assets/logos/16900649.png">
-    <img alt="vLLM" src="docs/source/assets/logos/20467978-A_AMD_ROCm_Lockup_85tall.webp" width=15%>
+    <img alt="ROCm" src="docs/source/assets/logos/16900649.png" width=15%>
   </picture>
 </p>
 
