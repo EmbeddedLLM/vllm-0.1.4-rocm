@@ -18,6 +18,9 @@ This version of vLLM supports model inferencing and serving on AMD GPUs with ROC
 
 For more details on the implementation, please visit our [blog post]().
 
+Supported models:
+- LLaMA / Vicuna
+
 ---
 
 *Latest News*
