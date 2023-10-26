@@ -18,7 +18,6 @@ This version of vLLM supports model inferencing and serving on AMD GPUs with ROC
 
 For more details on the implementation, please visit our [blog post]().
 
-
 ---
 
 *Latest News*
@@ -86,7 +85,7 @@ python -m vllm.entrypoints.api_server \
 The benchmark results can be obtained by running the vLLM benchmark scripts under the *benchmark* directory. For our benchmark results, please visit our [blog post]() for more details.
 
 
-## Ackowledgement
+## Acknowledgement
 
 This ROCm port was built upon the following amazing projects:
 
