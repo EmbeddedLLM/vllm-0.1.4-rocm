@@ -25,7 +25,7 @@
 
 #include <algorithm>
 
-#define WARP_SIZE 32
+#define WARP_SIZE 64
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
