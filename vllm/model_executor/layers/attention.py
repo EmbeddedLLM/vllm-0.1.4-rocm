@@ -3,14 +3,16 @@ from typing import List, Optional
 
 import torch
 import torch.nn as nn
-from xformers import ops as xops
-from xformers.ops.fmha.attn_bias import (BlockDiagonalCausalMask,
-                                         LowerTriangularMaskWithTensorBias)
 
+import vllm
+from vllm.xformers.ops.fmha.attn_bias import (BlockDiagonalCausalMask,
+                                         LowerTriangularMaskWithTensorBias)
 from vllm import attention_ops
 from vllm import cache_ops
 from vllm import pos_encoding_ops
 from vllm.model_executor.input_metadata import InputMetadata
+from vllm.xformers.ops.fmha import memory_efficient_attention_forward
+from vllm.xformers.ops.fmha.flash import FwOp
 
 _SUPPORTED_HEAD_SIZES = [64, 80, 96, 112, 128, 256]
 
@@ -61,7 +63,7 @@ class PagedAttention(nn.Module):
         self.num_heads = num_heads
         self.head_size = head_size
         self.scale = float(scale)
-        self.attn_op = xops.fmha.cutlass.FwOp()
+        self.attn_op = FwOp()
         self.num_kv_heads = num_heads if num_kv_heads is None else num_kv_heads
 
         assert self.num_heads % self.num_kv_heads == 0
@@ -108,7 +110,7 @@ class PagedAttention(nn.Module):
                                             dim=1)
 
         # TODO(woosuk): The unsqueeze op may incur some CPU overhead. Optimize.
-        out = xops.memory_efficient_attention_forward(
+        out = memory_efficient_attention_forward(
             query.unsqueeze(0),
             key.unsqueeze(0),
             value.unsqueeze(0),
@@ -397,7 +399,8 @@ class PagedAttentionWithALiBi(PagedAttention):
         start = 0
         for i, prompt_len in enumerate(input_metadata.prompt_lens):
             end = start + prompt_len
-            out = xops.memory_efficient_attention_forward(
+            out = memory_efficient_attention_forward(
+                
                 query[None, start:end],
                 key[None, start:end],
                 value[None, start:end],
