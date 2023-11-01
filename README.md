@@ -66,7 +66,6 @@ docker run -it \
        --shm-size 8G \
        --device /dev/kfd \
        --device /dev/dri \
-       -v <VOLUME_TO_MOUNT>:/app/<MOUNT_POINT> \
        vllm-rocm \
        bash
 ```

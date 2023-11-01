@@ -52,8 +52,7 @@ RUN cd /app \
 
 RUN cd /app \
     && mkdir dataset \
-    && cd dataset \
-    && wget https://huggingface.co/datasets/anon8231489123/ShareGPT_Vicuna_unfiltered/resolve/main/ShareGPT_V3_unfiltered_cleaned_split.json
+    && cd ..
 
 COPY ./benchmark_throughput.sh /app/benchmark_throughput.sh
 
