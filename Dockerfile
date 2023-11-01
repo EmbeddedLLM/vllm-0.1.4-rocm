@@ -32,4 +32,28 @@ ENV PATH=$PATH:/opt/rocm/bin:/libtorch/bin:
 ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/rocm/lib/:/libtorch/lib:
 ENV CPLUS_INCLUDE_PATH=$CPLUS_INCLUDE_PATH:/libtorch/include:/libtorch/include/torch/csrc/api/include/:/opt/rocm/include/:
 
+# Install ROCm flash-attention
+# The adaptation of a new flash attention interface seems imminent, so check out the last commit before such request is merged
+RUN mkdir libs \
+    && cd libs \
+    && git clone https://github.com/ROCmSoftwarePlatform/flash-attention.git --recursive \
+    && cd flash-attention \
+    && git checkout 444e15a \
+    && patch /opt/conda/envs/py_3.10/lib/python3.10/site-packages/torch/utils/hipify/hipify_python.py hipify_patch.patch \
+    && python3 setup.py install \
+    && cd ..
+
+RUN cd /app \
+    && git clone https://github.com/EmbeddedLLM/vllm-rocm.git \
+    && cd vllm-rocm \
+    && git checkout v0.1.4-rocm \
+    && python3 setup.py install \
+    && cd ..
+
+RUN cd /app \
+    && mkdir dataset \
+    && cd ..
+
+COPY ./benchmark_throughput.sh /app/benchmark_throughput.sh
+
 CMD ["/bin/bash"]
