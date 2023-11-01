@@ -26,7 +26,27 @@ For more details, please visit our [blog post](https://embeddedllm.com/blog/vllm
 
 ## Getting Started
 
-## From Docker Image (Optional)
+The following sections describes the installation of this ROCm port. If you intend to use our provided container, please skip to the [using docker](#using-docker) section.
+
+## Dependencies
+
+To build this project, the following pre-requisites must be met:
+
+- [PyTorch](https://pytorch.org/) with ROCm (5.7.0 or later) support
+
+- Install ROCm [flash-attention](https://github.com/ROCmSoftwarePlatform/flash-attention) following the instructions in [AMD ROCm Support](https://github.com/ROCmSoftwarePlatform/flash-attention#amd-gpurocm-support)
+
+## Installation
+
+Build the repository
+
+```bash
+git clone https://github.com/EmbeddedLLM/vllm-0.1.4-rocm
+cd vllm-0.1.4-rocm/
+python3 setup.py install
+```
+
+## Using Docker
 
 A base docker image can be built from this repository:
 
@@ -51,24 +71,6 @@ docker run -it \
        bash
 ```
 
-## Dependencies
-
-To build this project, the following pre-requisites must be met:
-
-- [PyTorch](https://pytorch.org/) with ROCm (5.7.0 or later) support
-
-- Install ROCm [flash-attention](https://github.com/ROCmSoftwarePlatform/flash-attention) following the instructions in [AMD ROCm Support](https://github.com/ROCmSoftwarePlatform/flash-attention#amd-gpurocm-support)
-
-## Installation
-
-Build the repository
-
-```bash
-git clone https://github.com/EmbeddedLLM/vllm-0.1.4-rocm
-cd vllm-0.1.4-rocm/
-python3 setup.py install
-```
-
 ## Serving
 
 The project supports native vLLM serving
@@ -82,6 +84,29 @@ python -m vllm.entrypoints.api_server \
 ## Benchmarking
 
 The benchmark results can be obtained by running the vLLM benchmark scripts under the *benchmark* directory. For our benchmark results, please visit our [blog post](https://embeddedllm.com/blog/vllm_rocm/) for more details.
+
+If your vLLM is installed using the provided [docker environment](#using-docker), you can benchmark the inferencing throughput following the steps below:
+- Download the model you would like to evaluate to a directory of your choice (say a vicuna-7b model is downloaded to /path/to/your/model/vicuna-7b-v1.5)
+- Run the docker and mount the model to /app/model
+
+```bash
+docker run -it \
+       --network=host \
+       --group-add=video \
+       --ipc=host \
+       --cap-add=SYS_PTRACE \
+       --security-opt seccomp=unconfined \
+       --shm-size 8G \
+       --device /dev/kfd \
+       --device /dev/dri \
+       -v /path/to/your/model/vicuna-7b-v1.5:/app/model \
+       vllm-rocm \
+       bash
+```
+Inside the container, run
+```bash
+bash /app/benchmark_throughput.sh
+```
 
 
 ## Acknowledgement
