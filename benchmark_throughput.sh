@@ -1,7 +1,7 @@
 #!/bin/bash
 
 main () {
-  
+
   cd /app
 
   positional_args=()
