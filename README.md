@@ -41,8 +41,8 @@ To build this project, the following pre-requisites must be met:
 Build the repository
 
 ```bash
-git clone https://github.com/EmbeddedLLM/vllm-0.1.4-rocm
-cd vllm-0.1.4-rocm/
+git clone https://github.com/EmbeddedLLM/vllm-rocm
+cd vllm-rocm/
 python3 setup.py install
 ```
 
@@ -51,7 +51,7 @@ python3 setup.py install
 A base docker image can be built from this repository:
 
 ```bash
-docker build -t vllm-rocm .
+docker build -t embeddedllminfo/vllm-rocm .
 ```
 
 Run a docker container with
@@ -66,7 +66,25 @@ docker run -it \
        --shm-size 8G \
        --device /dev/kfd \
        --device /dev/dri \
-       vllm-rocm \
+       embeddedllminfo/vllm-rocm \
+       bash
+```
+
+Alternatively, you can pull from our pre-built docker image:
+
+```bash
+docker pull embeddedllminfo/vllm-rocm:vllm-v0.1.4
+
+docker run -it \
+       --network=host \
+       --group-add=video \
+       --ipc=host \
+       --cap-add=SYS_PTRACE \
+       --security-opt seccomp=unconfined \
+       --shm-size 8G \
+       --device /dev/kfd \
+       --device /dev/dri \
+       embeddedllminfo/vllm-rocm \
        bash
 ```
 
@@ -99,7 +117,7 @@ docker run -it \
        --device /dev/kfd \
        --device /dev/dri \
        -v /path/to/your/model/vicuna-7b-v1.5:/app/model \
-       vllm-rocm \
+       embeddedllminfo/vllm-rocm \
        bash
 ```
 Inside the container, run
