@@ -46,6 +46,10 @@ cd vllm-rocm/
 python3 setup.py install
 ```
 
+## Getting Model
+
+Instructions on how to obtain model weights can be found [here](download_model.md).
+
 ## Using Docker
 
 A base docker image can be built from this repository:
