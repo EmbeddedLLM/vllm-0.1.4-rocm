@@ -56,4 +56,7 @@ RUN cd /app \
 
 COPY ./benchmark_throughput.sh /app/benchmark_throughput.sh
 
+RUN python3 -m pip install --upgrade pip
+RUN python3 -m pip install --no-cache-dir ray[all]
+
 CMD ["/bin/bash"]
