@@ -24,11 +24,11 @@ CXX_FLAGS = ["-g", "-O2", "-std=c++17"]
 # TODO(woosuk): Should we use -O3?
 NVCC_FLAGS = ["-O2", "-std=c++17"]
 
-if torch.version.hip:
+if torch.cuda.is_available() and torch.version.hip:
     if ROCM_HOME is not None:
         NVCC_FLAGS += [f"-DUSE_ROCM"]
 
-if not torch.version.hip:
+if torch.cuda.is_available() and torch.version.cuda:
     if CUDA_HOME is None:
         raise RuntimeError(
             "Cannot find CUDA_HOME. CUDA must be available to build the package.")
@@ -37,9 +37,9 @@ ABI = 1 if torch._C._GLIBCXX_USE_CXX11_ABI else 0
 CXX_FLAGS += [f"-D_GLIBCXX_USE_CXX11_ABI={ABI}"]
 NVCC_FLAGS += [f"-D_GLIBCXX_USE_CXX11_ABI={ABI}"]
 
-if CUDA_HOME is None:
-    raise RuntimeError(
-        "Cannot find CUDA_HOME. CUDA must be available to build the package.")
+#if CUDA_HOME is None:
+#    raise RuntimeError(
+#        "Cannot find CUDA_HOME. CUDA must be available to build the package.")
 
 
 def get_nvcc_cuda_version(cuda_dir: str) -> Version:
@@ -93,7 +93,7 @@ def get_torch_arch_list() -> Set[str]:
 
 # First, check the TORCH_CUDA_ARCH_LIST environment variable.
 compute_capabilities = get_torch_arch_list()
-if not torch.version.hip:
+if torch.cuda.is_available() and torch.version.cuda:
     if not compute_capabilities:
         # If TORCH_CUDA_ARCH_LIST is not defined or empty, target all available
         # GPUs on the current machine.
@@ -105,7 +105,7 @@ if not torch.version.hip:
                     "GPUs with compute capability below 7.0 are not supported.")
             compute_capabilities.add(f"{major}.{minor}")
 
-if not torch.version.hip:
+if torch.cuda.is_available() and torch.version.cuda:
     nvcc_cuda_version = get_nvcc_cuda_version(CUDA_HOME)
     if not compute_capabilities:
         # If no GPU is specified nor available, add all supported architectures
@@ -211,7 +211,7 @@ activation_extension = CUDAExtension(
 ext_modules.append(activation_extension)
 
 # Quantization kernels.
-if not torch.version.hip:
+if torch.cuda.is_available() and torch.version.cuda:
     quantization_extension = CUDAExtension(
         name="vllm.quantization_ops",
         sources=[
@@ -224,7 +224,7 @@ if not torch.version.hip:
             "nvcc": NVCC_FLAGS,
         },
     )
-else:
+if torch.cuda.is_available() and torch.version.hip:
     quantization_extension = CUDAExtension(
         name="vllm.quantization_ops",
         sources=[
