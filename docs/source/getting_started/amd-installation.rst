@@ -79,9 +79,8 @@ If you are going to setup on new pytorch+rocm5.7 docker container, you can follo
     Install flash-attention-2 (v2.0.4) following the instruction from [ROCmSoftwarePlatform/flash-attention](https://github.com/ROCmSoftwarePlatform/flash-attention/tree/flash_attention_for_rocm)
 
 
-    If you are using Pytorch-2.1.1+rocm5.7
-    Install flash-attention-2 (v2.0.4) following the instruction from [ROCmSoftwarePlatform/flash-attention](https://github.com/ROCmSoftwarePlatform/flash-attention/tree/flash_attention_for_rocm)
-    BUT, use the patch from this repo to patch the `hipify_python.py`
+    If you are using Pytorch-2.1.x+rocm5.7 or Pytorch-2.2.x+rocm5.7, you don't need to apply the `hipify_python.patch`.
+    You can directly build the flash-attention-2.
 
     .. code-block:: console
 
