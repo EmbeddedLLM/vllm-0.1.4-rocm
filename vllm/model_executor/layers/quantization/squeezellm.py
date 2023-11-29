@@ -112,6 +112,8 @@ class SqueezeLLMLinearMethod(LinearMethodBase):
                       bias: Optional[torch.Tensor] = None) -> torch.Tensor:
         qweight = weights["qweight"]
         lookup_table = weights["lookup_table"]
+        out_shape = x.shape[:-1] + (qweight.shape[-1], )
+        reshaped_x = x.reshape(-1, x.shape[-1])
         if torch.cuda.is_available() and torch.version.hip:
             out_float = torch.zeros(out_shape, device="cuda", dtype=torch.float)
             quantization_ops.squeezellm_gemm(reshaped_x, qweight, out_float,
@@ -119,8 +121,6 @@ class SqueezeLLMLinearMethod(LinearMethodBase):
             out = out_float.to(dtype=torch.float16)
             # do something specific for HIP
         elif torch.cuda.is_available() and torch.version.cuda:
-            out_shape = x.shape[:-1] + (qweight.shape[-1], )
-            reshaped_x = x.reshape(-1, x.shape[-1])
             # NOTE: The output tensor should be zero-initialized.
             out = torch.zeros(out_shape, device="cuda", dtype=torch.float16)
             quantization_ops.squeezellm_gemm(reshaped_x, qweight, out,
