@@ -88,7 +88,8 @@ If you are going to setup on new pytorch+rocm5.7 docker container, you can follo
         $ bash patch_torch211_flash_attn2.rocm.sh
 
     .. note::
-        Flash-attention-2 (v2.0.4) does not support sliding windows attention.
+        - Flash-attention-2 (v2.0.4) does not support sliding windows attention.
+        - You might need to downgrade the "ninja" version to 1.10 it is not used when compiling flash-attention-2 (e.g. `pip install ninja==1.10.2.4`)
 
 2. Setup xformers==0.0.22.post7 without dependencies, and apply patches
 
