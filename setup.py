@@ -17,7 +17,7 @@ MAIN_CUDA_VERSION = "12.1"
 # Supported NVIDIA GPU architectures.
 NVIDIA_SUPPORTED_ARCHS = {"7.0", "7.5", "8.0", "8.6", "8.9", "9.0"}
 ROCM_SUPPORTED_ARCHS = {"gfx90a", "gfx908", "gfx906", "gfx1030","gfx1100"}
-SUPPORTED_ARCHS = NVIDIA_SUPPORTED_ARCHS.union(ROCM_SUPPORTED_ARCHS)
+# SUPPORTED_ARCHS = NVIDIA_SUPPORTED_ARCHS.union(ROCM_SUPPORTED_ARCHS)
 
 # Compiler flags.
 CXX_FLAGS = ["-g", "-O2", "-std=c++17"]
@@ -37,11 +37,23 @@ ABI = 1 if torch._C._GLIBCXX_USE_CXX11_ABI else 0
 CXX_FLAGS += [f"-D_GLIBCXX_USE_CXX11_ABI={ABI}"]
 NVCC_FLAGS += [f"-D_GLIBCXX_USE_CXX11_ABI={ABI}"]
 
-#if CUDA_HOME is None:
-#    raise RuntimeError(
-#        "Cannot find CUDA_HOME. CUDA must be available to build the package.")
-
-
+def get_amdgpu_offload_arch():
+    error_message = ""
+    command = "/opt/rocm/llvm/bin/amdgpu-offload-arch"
+    try:
+        output = subprocess.check_output([command])
+        return output.decode('utf-8').strip()
+    except subprocess.CalledProcessError as e:
+        error_message = f"Error: {e}"
+    except FileNotFoundError:
+        # If the command is not found, print an error message
+        error_message = f"The command {command} was not found."
+    
+    if error_message:
+        raise RuntimeError(error_message)
+    
+    return None
+        
 def get_nvcc_cuda_version(cuda_dir: str) -> Version:
     """Get the CUDA version from nvcc.
 
@@ -72,7 +84,7 @@ def get_torch_arch_list() -> Set[str]:
         return set()
 
     # Filter out the invalid architectures and print a warning.
-    valid_archs = SUPPORTED_ARCHS.union({s + "+PTX" for s in NVIDIA_SUPPORTED_ARCHS})
+    valid_archs = NVIDIA_SUPPORTED_ARCHS.union({s + "+PTX" for s in NVIDIA_SUPPORTED_ARCHS})
     arch_list = torch_arch_list.intersection(valid_archs)
     # If none of the specified architectures are valid, raise an error.
     if not arch_list:
@@ -110,7 +122,7 @@ if torch.cuda.is_available() and torch.version.cuda:
     if not compute_capabilities:
         # If no GPU is specified nor available, add all supported architectures
         # based on the NVCC CUDA version.
-        compute_capabilities = SUPPORTED_ARCHS.copy()
+        compute_capabilities = NVIDIA_SUPPORTED_ARCHS.copy()
         if nvcc_cuda_version < Version("11.1"):
             compute_capabilities.remove("8.6")
         if nvcc_cuda_version < Version("11.8"):
@@ -153,6 +165,14 @@ if torch.cuda.is_available() and torch.version.cuda:
         num_threads = min(os.cpu_count(), 8)
         NVCC_FLAGS += ["--threads", str(num_threads)]
 
+elif torch.cuda.is_available() and torch.version.hip:
+    amd_arch = get_amdgpu_offload_arch()
+    if not amd_arch in ROCM_SUPPORTED_ARCHS:
+        raise RuntimeError(
+            f"Only the following arch is supported: {ROCM_SUPPORTED_ARCHS}"
+            f"amdgpu_arch_found: {amd_arch}"
+        )
+    
 ext_modules = []
 
 # Cache operations.
@@ -224,7 +244,7 @@ if torch.cuda.is_available() and torch.version.cuda:
             "nvcc": NVCC_FLAGS,
         },
     )
-if torch.cuda.is_available() and torch.version.hip:
+elif torch.cuda.is_available() and torch.version.hip:
     quantization_extension = CUDAExtension(
         name="vllm.quantization_ops",
         sources=[
@@ -287,8 +307,14 @@ def read_readme() -> str:
 
 def get_requirements() -> List[str]:
     """Get Python package dependencies from requirements.txt."""
-    with open(get_path("requirements.txt")) as f:
-        requirements = f.read().strip().split("\n")
+    if torch.cuda.is_available() and torch.version.hip:
+        with open(get_path("requirements-rocm.txt")) as f:
+            requirements = f.read().strip().split("\n")
+    elif torch.cuda.is_available() and torch.version.cuda:
+        with open(get_path("requirements.txt")) as f:
+            requirements = f.read().strip().split("\n")
+    print("requirements: ", requirements)
+    # exit()
     return requirements
 
 
