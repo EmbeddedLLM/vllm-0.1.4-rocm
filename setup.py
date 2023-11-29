@@ -53,7 +53,26 @@ def get_amdgpu_offload_arch():
         raise RuntimeError(error_message)
     
     return None
-        
+
+def get_hipcc_rocm_version():
+    # Run the hipcc --version command
+    result = subprocess.run(['hipcc', '--version'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
+    # Check if the command was executed successfully
+    if result.returncode != 0:
+        print("Error running 'hipcc --version'")
+        return None
+
+    # Extract the version using a regular expression
+    match = re.search(r'HIP version: (\S+)', result.stdout)
+    if match:
+        # Return the version string
+        return match.group(1)
+    else:
+        print("Could not find HIP version in the output")
+        return None
+
+
 def get_nvcc_cuda_version(cuda_dir: str) -> Version:
     """Get the CUDA version from nvcc.
 
@@ -289,10 +308,20 @@ def find_version(filepath: str) -> str:
 
 def get_vllm_version() -> str:
     version = find_version(get_path("vllm", "__init__.py"))
-    # cuda_version = str(nvcc_cuda_version)
-    # if cuda_version != MAIN_CUDA_VERSION:
-    #     cuda_version_str = cuda_version.replace(".", "")[:3]
-    #     version += f"+cu{cuda_version_str}"
+    
+    if torch.cuda.is_available() and torch.version.cuda:
+        cuda_version = str(nvcc_cuda_version)
+        if cuda_version != MAIN_CUDA_VERSION:
+            cuda_version_str = cuda_version.replace(".", "")[:3]
+            version += f"+cu{cuda_version_str}"
+        
+    elif torch.cuda.is_available() and torch.version.hip:
+        # Get the HIP version
+        hipcc_version = get_hipcc_rocm_version()
+        if hipcc_version != MAIN_CUDA_VERSION:
+            rocm_version_str = hipcc_version.replace(".", "")[:3]
+            version += f"+rocm{rocm_version_str}"
+    
     return version
 
 
