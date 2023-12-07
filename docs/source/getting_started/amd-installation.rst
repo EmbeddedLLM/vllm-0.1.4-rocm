@@ -5,7 +5,7 @@ Installation with ROCm
 
 vLLM 0.2.x onwards supports model inferencing and serving on AMD GPUs with ROCm.
 At the moment AWQ quantization is not supported in ROCm, but SqueezeLLM quantization has been ported.
-Datatypes currently supported in ROCm are FP16 and BF16.
+Data types currently supported in ROCm are FP16 and BF16.
 
 Requirements
 ------------
@@ -14,7 +14,7 @@ Requirements
 * Python: 3.8 -- 3.11 (Verified on 3.10)
 * GPU: MI200s
 * Pytorch 2.0.1/2.1.1/2.2
-* ROCm >= 5.7.0
+* ROCm 5.7
 
 .. _quick_start_docker_rocm:
 
@@ -59,9 +59,9 @@ You can build and install vLLM from source:
 
     Install ROCm's flash attention (v2.0.4) following the instructions from `ROCmSoftwarePlatform/flash-attention <https://github.com/ROCmSoftwarePlatform/flash-attention/tree/flash_attention_for_rocm#amd-gpurocm-support>`_
 
-    Note: If you are using rocm5.7 with pytorch 2.1.0 onwards, you don't need to apply the `hipify_python.patch`. You can build the ROCm flash attention directly.
-
 .. note::
+    - If you are using rocm5.7 with pytorch 2.1.0 onwards, you don't need to apply the `hipify_python.patch`. You can build the ROCm flash attention directly.
+    - If you fail to install `ROCmSoftwarePlatform/flash-attention`, try cloning from the commit `6fd2f8e572805681cd67ef8596c7e2ce521ed3c6`.
     - ROCm's Flash-attention-2 (v2.0.4) does not support sliding windows attention.
     - You might need to downgrade the "ninja" version to 1.10 it is not used when compiling flash-attention-2 (e.g. `pip install ninja==1.10.2.4`)
 
@@ -117,9 +117,9 @@ If you plan to install vLLM-ROCm on a local machine or start from a fresh docker
 
     Install ROCm's flash attention (v2.0.4) following the instructions from `ROCmSoftwarePlatform/flash-attention <https://github.com/ROCmSoftwarePlatform/flash-attention/tree/flash_attention_for_rocm#amd-gpurocm-support>`_
 
-    Note: If you are using rocm5.7 with pytorch 2.1.0 onwards, you don't need to apply the `hipify_python.patch`. You can build the ROCm flash attention directly.
-
 .. note::
+    - If you are using rocm5.7 with pytorch 2.1.0 onwards, you don't need to apply the `hipify_python.patch`. You can build the ROCm flash attention directly.
+    - If you fail to install `ROCmSoftwarePlatform/flash-attention`, try cloning from the commit `6fd2f8e572805681cd67ef8596c7e2ce521ed3c6`.
     - ROCm's Flash-attention-2 (v2.0.4) does not support sliding windows attention.
     - You might need to downgrade the "ninja" version to 1.10 it is not used when compiling flash-attention-2 (e.g. `pip install ninja==1.10.2.4`)
 
