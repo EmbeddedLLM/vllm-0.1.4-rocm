@@ -16,9 +16,15 @@ Requirements
 * Pytorch 2.0.1/2.1.1/2.2
 * ROCm 5.7
 
+Installation options:
+
+#. :ref:`(Recommended) Quick start with vLLM pre-installed in Docker Image <quick_start_docker_rocm>`
+#. :ref:`Build from source <build_from_source_rocm>`
+#. :ref:`Build from source with docker <build_from_source_docker_rocm>`
+
 .. _quick_start_docker_rocm:
 
-Option 0 (Recommended): Quick start with vLLM pre-installed in Docker Image
+(Recommended) Option 1: Quick start with vLLM pre-installed in Docker Image
 ---------------------------------------------------------------------------
 
 .. code-block:: console
@@ -40,7 +46,7 @@ Option 0 (Recommended): Quick start with vLLM pre-installed in Docker Image
 
 .. _build_from_source_rocm:
 
-Option 1: Build from source
+Option 2: Build from source
 ---------------------------
 
 You can build and install vLLM from source:
@@ -83,7 +89,7 @@ You can build and install vLLM from source:
 
 .. _build_from_source_docker_rocm:
 
-Option 2: Build from source with docker
+Option 3: Build from source with docker
 -----------------------------------------------------
 
 You can build and install vLLM from source:
