@@ -112,7 +112,7 @@ Build a docker image from `Dockerfile.rocm`, and launch a docker container.
        vllm-rocm \
        bash
 
-If you plan to install vLLM-ROCm on a local machine or start from a fresh docker image (e.g. pytorch+rocm5.7), you can follow the steps below:
+Alternatively, if you plan to install vLLM-ROCm on a local machine or start from a fresh docker image (e.g. rocm/pytorch), you can follow the steps below:
 
 0. Install prerequisites (skip if you are already in an environment/docker with the following installed):
 
