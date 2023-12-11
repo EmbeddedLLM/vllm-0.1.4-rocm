@@ -1,13 +1,16 @@
+import contextlib
 import io
 import os
 import re
 import subprocess
-from typing import List, Set
 import warnings
+from pathlib import Path
+from typing import List, Set
 
 from packaging.version import parse, Version
 import setuptools
 import torch
+import torch.utils.cpp_extension as torch_cpp_ext
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension, CUDA_HOME, ROCM_HOME
 
 ROOT_DIR = os.path.dirname(__file__)
@@ -85,6 +88,11 @@ def get_hipcc_rocm_version():
     else:
         print("Could not find HIP version in the output")
         return None
+
+
+def glob(pattern: str):
+    root = Path(__name__).parent
+    return [str(p) for p in root.glob(pattern)]
 
 
 def get_nvcc_cuda_version(cuda_dir: str) -> Version:
@@ -196,12 +204,30 @@ if _is_cuda():
             NVCC_FLAGS += [
                 "-gencode", f"arch=compute_{num},code=compute_{num}"
             ]
+        if int(capability[0]) >= 8:
+            NVCC_FLAGS_PUNICA += ["-gencode", f"arch=compute_{num},code=sm_{num}"]
+            if capability.endswith("+PTX"):
+                NVCC_FLAGS_PUNICA += [
+                    "-gencode", f"arch=compute_{num},code=compute_{num}"
+                ]
 
     # Use NVCC threads to parallelize the build.
     if nvcc_cuda_version >= Version("11.2"):
         nvcc_threads = int(os.getenv("NVCC_THREADS", 8))
         num_threads = min(os.cpu_count(), nvcc_threads)
         NVCC_FLAGS += ["--threads", str(num_threads)]
+    
+    # changes for punica kernels
+    NVCC_FLAGS += torch_cpp_ext.COMMON_NVCC_FLAGS
+    REMOVE_NVCC_FLAGS = [
+        '-D__CUDA_NO_HALF_OPERATORS__',
+        '-D__CUDA_NO_HALF_CONVERSIONS__',
+        '-D__CUDA_NO_BFLOAT16_CONVERSIONS__',
+        '-D__CUDA_NO_HALF2_OPERATORS__',
+    ]
+    for flag in REMOVE_NVCC_FLAGS:
+        with contextlib.suppress(ValueError):
+            torch_cpp_ext.COMMON_NVCC_FLAGS.remove(flag)
 
 elif _is_hip():
     amd_arch = get_amdgpu_offload_arch()
@@ -225,6 +251,30 @@ vllm_extension_sources = [
 
 if _is_cuda():
     vllm_extension_sources.append("csrc/quantization/awq/gemm_kernels.cu")
+
+install_punica = bool(int(os.getenv("VLLM_INSTALL_PUNICA_KERNELS", "1")))
+
+if _is_cuda():
+    device_count = torch.cuda.device_count()
+    for i in range(device_count):
+        major, minor = torch.cuda.get_device_capability(i)
+        if major < 8:
+            install_punica = False
+            break
+elif _is_hip():
+    pass
+
+if install_punica:
+    ext_modules.append(
+        CUDAExtension(
+            name="vllm._punica_C",
+            sources=["csrc/punica/punica_ops.cc"] +
+            glob("csrc/punica/bgmv/*.cu"),
+            extra_compile_args={
+                "cxx": CXX_FLAGS,
+                "nvcc": NVCC_FLAGS_PUNICA,
+            },
+        ))
 
 vllm_extension = CUDAExtension(
     name="vllm._C",
