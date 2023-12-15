@@ -266,10 +266,6 @@ if _is_cuda():
 elif _is_hip():
     pass
 
-print(NVCC_FLAGS)
-print('=========================')
-print(NVCC_FLAGS_PUNICA)
-
 vllm_extension = CUDAExtension(
     name="vllm._C",
     sources=vllm_extension_sources,
