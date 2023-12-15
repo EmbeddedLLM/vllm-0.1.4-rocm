@@ -1,4 +1,5 @@
-#pragma once
+#ifndef CSRC__CUDA_COMPAT_H__
+#define CSRC__CUDA_COMPAT_H__
 
 #ifndef USE_ROCM
   #define VLLM_LDG(arg) __ldg(arg)
@@ -19,6 +20,12 @@
 #endif
 
 #ifndef USE_ROCM
+  #define VLLM_SHFL_DOWN_SYNC(var, lane_delta) __shfl_down_sync(uint32_t(-1), var, lane_delta)
+#else
+  #define VLLM_SHFL_DOWN_SYNC(var, lane_delta) __shfl_down(var, lane_delta)
+#endif
+
+#ifndef USE_ROCM
   #define VLLM_DevFuncAttribute_SET_MaxDynamicSharedMemorySize(FUNC, VAL) \
     cudaFuncSetAttribute(FUNC, cudaFuncAttributeMaxDynamicSharedMemorySize, VAL)
 #else
@@ -26,3 +33,4 @@
     hipFuncSetAttribute(FUNC, hipFuncAttributeMaxDynamicSharedMemorySize, VAL)
 #endif
 
+#endif // CSRC__CUDA_COMPAT_H__

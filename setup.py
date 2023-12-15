@@ -50,7 +50,7 @@ if _is_cuda() and CUDA_HOME is None:
 ABI = 1 if torch._C._GLIBCXX_USE_CXX11_ABI else 0
 CXX_FLAGS += [f"-D_GLIBCXX_USE_CXX11_ABI={ABI}"]
 NVCC_FLAGS += [f"-D_GLIBCXX_USE_CXX11_ABI={ABI}"]
-
+NVCC_FLAGS_PUNICA = NVCC_FLAGS.copy()
 
 def get_amdgpu_offload_arch():
     command = "/opt/rocm/llvm/bin/amdgpu-offload-arch"
@@ -196,6 +196,8 @@ if _is_cuda():
             raise RuntimeError(
                 "CUDA 11.8 or higher is required for compute capability 9.0.")
 
+    NVCC_FLAGS_PUNICA = NVCC_FLAGS.copy()
+
     # Add target compute capabilities to NVCC flags.
     for capability in compute_capabilities:
         num = capability[0] + capability[2]
@@ -264,17 +266,9 @@ if _is_cuda():
 elif _is_hip():
     pass
 
-if install_punica:
-    ext_modules.append(
-        CUDAExtension(
-            name="vllm._punica_C",
-            sources=["csrc/punica/punica_ops.cc"] +
-            glob("csrc/punica/bgmv/*.cu"),
-            extra_compile_args={
-                "cxx": CXX_FLAGS,
-                "nvcc": NVCC_FLAGS_PUNICA,
-            },
-        ))
+print(NVCC_FLAGS)
+print('=========================')
+print(NVCC_FLAGS_PUNICA)
 
 vllm_extension = CUDAExtension(
     name="vllm._C",
@@ -285,6 +279,19 @@ vllm_extension = CUDAExtension(
     },
 )
 ext_modules.append(vllm_extension)
+
+if install_punica:
+    ext_modules.append(
+        CUDAExtension(
+            name="vllm._punica_C",
+            sources=["csrc/punica/punica_ops.cu",
+                     "csrc/punica/punica_pybind.cpp"] +
+            glob("csrc/punica/bgmv/*.cu"),
+            extra_compile_args={
+                "cxx": CXX_FLAGS,
+                "nvcc": NVCC_FLAGS_PUNICA,
+            },
+        ))
 
 
 def get_path(*filepath) -> str:
