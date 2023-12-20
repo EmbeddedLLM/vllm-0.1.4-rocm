@@ -1,4 +1,5 @@
 import enum
+import socket
 import uuid
 from platform import uname
 
@@ -114,11 +115,6 @@ def get_max_shared_memory_bytes(gpu: int = 0) -> int:
     return int(max_shared_mem)
 
 
-def get_gpu_memory(gpu: int = 0) -> int:
-    """Returns the total memory of the GPU in bytes."""
-    return torch.cuda.get_device_properties(gpu).total_memory
-
-
 def get_cpu_memory() -> int:
     """Returns the total CPU memory of the node in bytes."""
     return psutil.virtual_memory().total
@@ -147,3 +143,9 @@ def make_async(func: Callable[..., T]) -> Callable[..., Awaitable[T]]:
         return loop.run_in_executor(executor=None, func=p_func)
 
     return _async_wrapper
+
+
+def get_open_port():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        return s.getsockname()[1]
