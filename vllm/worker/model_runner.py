@@ -275,15 +275,6 @@ class ModelRunner:
                                     device=device,
                                     pin_memory=pin_memory)
         
-        max_block_table_len = max([len(t) for t in block_tables])
-        block_tables = _make_tensor_with_pad(block_tables,
-                                             max_len=max_block_table_len,
-                                             pad=0,
-                                             dtype=torch.int)
-        lora_index_mapping = [
-            _pad_to_max(mapping, 1, pad=0) for mapping in lora_index_mapping
-        ]
-
         if use_captured_graph:
             # The shape of graph_block_tables is
             # [max batch size, max context len // block size].
@@ -293,12 +284,15 @@ class ModelRunner:
                     input_block_tables[i, :len(block_table)] = block_table
             block_tables = torch.tensor(input_block_tables, device=device)
         else:
-            block_tables = _make_tensor_with_pad(
-                block_tables,
-                max_len=max_context_len,
-                pad=0,
-                dtype=torch.int,
-            )
+            max_block_table_len = max([len(t) for t in block_tables])
+            block_tables = _make_tensor_with_pad(block_tables,
+                                                max_len=max_block_table_len,
+                                                pad=0,
+                                                dtype=torch.int)
+        
+        lora_index_mapping = [
+            _pad_to_max(mapping, 1, pad=0) for mapping in lora_index_mapping
+        ]
 
         input_metadata = InputMetadata(
             prompt_lens=[],
