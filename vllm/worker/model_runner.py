@@ -536,20 +536,20 @@ class ModelRunner:
         logger.info(f"Graph capturing finished in {elapsed_time:.0f} secs.")
 
     def remove_all_loras(self) -> bool:
-        return self.lora_manager.remove_all_loras()
+        return self.lora_manager is not None and self.lora_manager.remove_all_loras()
 
     def set_active_loras(self, lora_requests: List[LoRARequest],
                          lora_mapping: LoRAMapping) -> None:
         self.lora_manager.set_active_loras(lora_requests, lora_mapping)
 
     def add_lora(self, lora_request: LoRARequest) -> bool:
-        return self.lora_manager.add_lora(lora_request)
+        return self.lora_manager is not None and self.lora_manager.add_lora(lora_request)
 
     def remove_lora(self, lora_id: int) -> bool:
-        return self.lora_manager.remove_lora(lora_id)
+        return self.lora_manager is not None and self.lora_manager.remove_lora(lora_id)
 
     def list_loras(self) -> Set[int]:
-        return self.lora_manager.list_loras()
+        return self.lora_manager is not None and self.lora_manager.list_loras()
 
     @torch.inference_mode()
     def capture_model(self, kv_caches: List[KVCache]) -> None:

@@ -91,10 +91,14 @@ def _apply_lora_packed_nslice(
     indices = indices.view(-1)
     add_lora_slice(output, x, lora_a_stacked[0], lora_b_stacked[0], indices, 0,
                    1.0, 0, output_slices[0])
-    add_lora_slice(output, x, lora_a_stacked[1], lora_b_stacked[1], indices, 0,
-                   1.0, output_slices[0], output_slices[1])
-    add_lora_slice(output, x, lora_a_stacked[2], lora_b_stacked[2], indices, 0,
-                   1.0, output_slices[0] + output_slices[1], output_slices[1])
+    if len(output_slices) == 1:
+        add_lora_slice(output, x, lora_a_stacked[1], lora_b_stacked[1], indices, 0,
+                       1.0, output_slices[0], output_slices[0])
+    else:
+        add_lora_slice(output, x, lora_a_stacked[1], lora_b_stacked[1], indices, 0,
+                       1.0, output_slices[0], output_slices[1])
+        add_lora_slice(output, x, lora_a_stacked[2], lora_b_stacked[2], indices, 0,
+                       1.0, output_slices[0] + output_slices[1], output_slices[1])
     return output.view_as(org_output)
 
 
