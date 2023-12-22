@@ -10,10 +10,6 @@ from vllm.config import ModelConfig, LoRAConfig
 from vllm.model_executor.models import ModelRegistry
 from vllm.model_executor.weight_utils import (get_quant_config,
                                               initialize_dummy_weights)
-from vllm.utils import is_hip
-from vllm.logger import init_logger
-
-logger = init_logger(__name__)
 
 
 @contextlib.contextmanager
@@ -67,7 +63,7 @@ def get_model(model_config: ModelConfig,
         # Create a model instance.
         # The weights will be initialized as empty tensors.
         with torch.device("cuda"):
-            if getattr(model_class, "supports_lora", True):
+            if getattr(model_class, "supports_lora", False):
                 model = model_class(model_config.hf_config, linear_method,
                                     lora_config)
             elif lora_config:

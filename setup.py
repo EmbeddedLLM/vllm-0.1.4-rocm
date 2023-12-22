@@ -52,6 +52,10 @@ CXX_FLAGS += [f"-D_GLIBCXX_USE_CXX11_ABI={ABI}"]
 NVCC_FLAGS += [f"-D_GLIBCXX_USE_CXX11_ABI={ABI}"]
 NVCC_FLAGS_PUNICA = NVCC_FLAGS.copy()
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> multi_lora
 def get_amdgpu_offload_arch():
     command = "/opt/rocm/llvm/bin/amdgpu-offload-arch"
     try:
