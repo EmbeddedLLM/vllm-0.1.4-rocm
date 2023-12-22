@@ -194,7 +194,7 @@ class ModelRunner:
         slot_mapping: List[List[int]] = []
         context_lens: List[int] = []
         block_tables: List[List[int]] = []
-        lora_index_mapping: List[int] = []
+        lora_index_mapping: List[List[int]] = []
         lora_prompt_mapping: List[int] = []
 
         for seq_group_metadata in seq_group_metadata_list:
