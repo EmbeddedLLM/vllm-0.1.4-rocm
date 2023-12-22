@@ -540,7 +540,8 @@ class ModelRunner:
 
     def set_active_loras(self, lora_requests: List[LoRARequest],
                          lora_mapping: LoRAMapping) -> None:
-        self.lora_manager.set_active_loras(lora_requests, lora_mapping)
+        if self.lora_manager is not None:
+            self.lora_manager.set_active_loras(lora_requests, lora_mapping)
 
     def add_lora(self, lora_request: LoRARequest) -> bool:
         return self.lora_manager is not None and self.lora_manager.add_lora(lora_request)
