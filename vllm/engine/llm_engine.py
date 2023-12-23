@@ -1,4 +1,5 @@
 import copy
+import os
 import time
 from functools import partial
 from typing import TYPE_CHECKING, Any, Iterable, List, Optional, Tuple, Union
@@ -86,6 +87,7 @@ class LLMEngine:
             f"load_format={model_config.load_format}, "
             f"tensor_parallel_size={parallel_config.tensor_parallel_size}, "
             f"quantization={model_config.quantization}, "
+            f"enforce_eager={model_config.enforce_eager}, "
             f"seed={model_config.seed})")
         # TODO(woosuk): Print more configs in debug mode.
 
@@ -102,6 +104,10 @@ class LLMEngine:
 
         # Create the parallel GPU workers.
         if self.parallel_config.worker_use_ray:
+            # Disable Ray usage stats collection.
+            ray_usage = os.environ.get("RAY_USAGE_STATS_ENABLED", "0")
+            if ray_usage != "1":
+                os.environ["RAY_USAGE_STATS_ENABLED"] = "0"
             self._init_workers_ray(placement_group)
         else:
             self._init_workers(distributed_init_method)
@@ -118,6 +124,9 @@ class LLMEngine:
         self.num_prompt_tokens: List[Tuple[float, int]] = []
         # List of (timestamp, num_tokens)
         self.num_generation_tokens: List[Tuple[float, int]] = []
+
+    def get_tokenizer_for_seq(self, sequence: Sequence):
+        return self.tokenizer.get_lora_tokenizer(sequence.lora_request)
 
     def _init_workers(self, distributed_init_method: str):
         # Lazy import the Worker to avoid importing torch.cuda/xformers
@@ -148,7 +157,7 @@ class LLMEngine:
             max_parallel_loading_workers,
         )
 
-    def _init_tokenizer(self, **kwargs):
+    def _init_tokenizer(self, **tokenizer_init_kwargs):
         init_kwargs = dict(
             enable_lora=bool(self.lora_config),
             max_num_seqs=self.scheduler_config.max_num_seqs,
@@ -156,7 +165,7 @@ class LLMEngine:
             tokenizer_mode=self.model_config.tokenizer_mode,
             trust_remote_code=self.model_config.trust_remote_code,
             revision=self.model_config.tokenizer_revision)
-        init_kwargs.update(kwargs)
+        init_kwargs.update(tokenizer_init_kwargs)
         self.tokenizer: MultiLoRATokenizer = MultiLoRATokenizer(
             self.model_config.tokenizer, **init_kwargs)
 
@@ -242,12 +251,23 @@ class LLMEngine:
             raise ValueError("No available memory for the cache blocks. "
                              "Try increasing `gpu_memory_utilization` when "
                              "initializing the engine.")
+        max_seq_len = self.cache_config.block_size * num_gpu_blocks
+        if self.model_config.max_model_len > max_seq_len:
+            raise ValueError(
+                f"The model's max seq len ({self.model_config.max_model_len}) "
+                "is larger than the maximum number of tokens that can be "
+                f"stored in KV cache ({max_seq_len}). Try increasing "
+                "`gpu_memory_utilization` or decreasing `max_model_len` when "
+                "initializing the engine.")
 
         self.cache_config.num_gpu_blocks = num_gpu_blocks
         self.cache_config.num_cpu_blocks = num_cpu_blocks
 
         # Initialize the cache.
         self._run_workers("init_cache_engine", cache_config=self.cache_config)
+        # Warm up the model. This includes capturing the model into CUDA graph
+        # if enforce_eager is False.
+        self._run_workers("warm_up_model")
 
     @classmethod
     def from_engine_args(cls, engine_args: EngineArgs) -> "LLMEngine":
@@ -372,13 +392,13 @@ class LLMEngine:
 
         current_worst_score = (current_worst_seq.get_beam_search_score(
             length_penalty=length_penalty,
-            eos_token_id=self.tokenizer.get_lora_tokenizer(
-                current_worst_seq.lora_request).eos_token_id))
+            eos_token_id=self.get_tokenizer_for_seq(
+                current_worst_seq).eos_token_id))
         if early_stopping is False:
             highest_attainable_score = (best_running_seq.get_beam_search_score(
                 length_penalty=length_penalty,
-                eos_token_id=self.tokenizer.get_lora_tokenizer(
-                    best_running_seq.lora_request).eos_token_id))
+                eos_token_id=self.get_tokenizer_for_seq(
+                    best_running_seq).eos_token_id))
         else:
             assert early_stopping == "never"
             if length_penalty > 0.0:
@@ -392,8 +412,8 @@ class LLMEngine:
                 highest_attainable_score = (
                     best_running_seq.get_beam_search_score(
                         length_penalty=length_penalty,
-                        eos_token_id=self.tokenizer.get_lora_tokenizer(
-                            best_running_seq.lora_request).eos_token_id,
+                        eos_token_id=self.get_tokenizer_for_seq(
+                            best_running_seq).eos_token_id,
                         seq_len=max_possible_length))
             else:
                 # Otherwise, beam search will prefer shorter sequences. The
@@ -402,8 +422,8 @@ class LLMEngine:
                 highest_attainable_score = (
                     best_running_seq.get_beam_search_score(
                         length_penalty=length_penalty,
-                        eos_token_id=self.tokenizer.get_lora_tokenizer(
-                            best_running_seq.lora_request).eos_token_id))
+                        eos_token_id=self.get_tokenizer_for_seq(
+                            best_running_seq).eos_token_id))
         return current_worst_score >= highest_attainable_score
 
     def _process_sequence_group_outputs(self, seq_group: SequenceGroup,
@@ -494,8 +514,7 @@ class LLMEngine:
         # Sort the finished sequences by their scores.
         all_finished_seqs.sort(key=lambda x: x[0].get_beam_search_score(
             length_penalty=length_penalty,
-            eos_token_id=self.tokenizer.get_lora_tokenizer(x[0].lora_request
-                                                           ).eos_token_id),
+            eos_token_id=self.get_tokenizer_for_seq(x[0]).eos_token_id),
                                reverse=True)
         for seq, parent, is_new in all_finished_seqs[:beam_width]:
             if is_new:
@@ -523,8 +542,7 @@ class LLMEngine:
         # Sort the running sequences by their scores.
         running_child_seqs.sort(key=lambda x: x[0].get_beam_search_score(
             length_penalty=length_penalty,
-            eos_token_id=self.tokenizer.get_lora_tokenizer(x[0].lora_request
-                                                           ).eos_token_id),
+            eos_token_id=self.get_tokenizer_for_seq(x[0]).eos_token_id),
                                 reverse=True)
 
         # Check if we can stop the beam search.
@@ -704,7 +722,7 @@ class LLMEngine:
         """Decodes the new token for a sequence."""
         (new_tokens, new_output_text, prefix_offset,
          read_offset) = detokenize_incrementally(
-             self.tokenizer.get_lora_tokenizer(seq.lora_request),
+             self.get_tokenizer_for_seq(seq),
              all_input_ids=seq.get_token_ids(),
              prev_tokens=seq.tokens,
              prefix_offset=seq.prefix_offset,
@@ -725,9 +743,10 @@ class LLMEngine:
         """Stop the finished sequences."""
         for stop_str in sampling_params.stop:
             if seq.output_text.endswith(stop_str):
-                # Truncate the output text so that the stop string is
-                # not included in the output.
-                seq.output_text = seq.output_text[:-len(stop_str)]
+                if not sampling_params.include_stop_str_in_output:
+                    # Truncate the output text so that the stop string is
+                    # not included in the output.
+                    seq.output_text = seq.output_text[:-len(stop_str)]
                 seq.status = SequenceStatus.FINISHED_STOPPED
                 return
         if seq.get_last_token_id() in sampling_params.stop_token_ids:
@@ -746,8 +765,7 @@ class LLMEngine:
 
         # Check if the sequence has generated the EOS token.
         if ((not sampling_params.ignore_eos) and seq.get_last_token_id()
-                == self.tokenizer.get_lora_tokenizer(
-                    seq.lora_request).eos_token_id):
+                == self.get_tokenizer_for_seq(seq).eos_token_id):
             seq.status = SequenceStatus.FINISHED_STOPPED
             return
 

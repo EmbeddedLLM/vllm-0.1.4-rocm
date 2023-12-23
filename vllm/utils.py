@@ -1,4 +1,5 @@
 import enum
+import socket
 import uuid
 from platform import uname
 
@@ -105,6 +106,10 @@ class LRUCache:
         self.cache.clear()
 
 
+def is_hip() -> bool:
+    return torch.version.hip is not None
+
+
 def get_max_shared_memory_bytes(gpu: int = 0) -> int:
     """Returns the maximum shared memory per thread block in bytes."""
     # https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html
@@ -112,11 +117,6 @@ def get_max_shared_memory_bytes(gpu: int = 0) -> int:
     max_shared_mem = cuda_utils.get_device_attribute(
         cudaDevAttrMaxSharedMemoryPerBlockOptin, gpu)
     return int(max_shared_mem)
-
-
-def get_gpu_memory(gpu: int = 0) -> int:
-    """Returns the total memory of the GPU in bytes."""
-    return torch.cuda.get_device_properties(gpu).total_memory
 
 
 def get_cpu_memory() -> int:
@@ -147,3 +147,9 @@ def make_async(func: Callable[..., T]) -> Callable[..., Awaitable[T]]:
         return loop.run_in_executor(executor=None, func=p_func)
 
     return _async_wrapper
+
+
+def get_open_port():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        return s.getsockname()[1]

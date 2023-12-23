@@ -1,5 +1,4 @@
-#ifndef CSRC__CUDA_COMPAT_H__
-#define CSRC__CUDA_COMPAT_H__
+#pragma once
 
 #ifndef USE_ROCM
   #define VLLM_LDG(arg) __ldg(arg)
@@ -33,4 +32,3 @@
     hipFuncSetAttribute(FUNC, hipFuncAttributeMaxDynamicSharedMemorySize, VAL)
 #endif
 
-#endif // CSRC__CUDA_COMPAT_H__

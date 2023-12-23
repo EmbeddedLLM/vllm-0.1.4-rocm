@@ -2,19 +2,17 @@ multi-lora rocm development
 
 Derived from [Yard1's multi-lora branch](https://github.com/Yard1/vllm/tree/multi_lora)
 
-[A note to whoever wants to run it on ROCm now]
+[Important note]
 
-Starting from ROCm v5.7.0, some type conversion utils for bf16 are implemented in header files, but unfortunately some of them are not specified as inline or static functions. So building the project on ROCm directly would lead to failures in multiple definitions of functions.
+Starting from ROCm v5.7, some type conversion functions on bfloat16 are implemented in header files. Unfortunately a few of them are not specified as inline or static functions, so building the project on ROCm directly would result in ODR violations when linking the translation units.
 
-To circumvent this I have been manually adding the "inline" keyward to the related functions. In the container we're using it means adding the keyword "inline" to "/opt/rocm/include/hip/amd_detail/amd_hip_bf16.h#96" so that the line becomes
+A way to circumvent this is to manually add the `inline` or `static` keywards to the related functions. In the container that `Dockerfile.rocm` builds from, it means adding the keyword `inline` to `/opt/rocm/include/hip/amd_detail/amd_hip_bf16.h:96` so that the line becomes
 
 ```cpp
 L96: #define __HOST_DEVICE__ __host__ __device__ inline
 ```
 
-But of course this is far from pretty, if not considered nasty, as it is modifying include header in a potentially dangerous manner, and surely there should be better ways which I'm trying to find.
-
-This should be solved starting from [ROCm 6.0.0 though](https://github.com/ROCm/clr/commit/86bd518981b364c138f9901b28a529899d8654f3).
+This is far from a pretty solution though. Even though it appears that [ROCm may be fixing this](https://github.com/ROCm/clr/commit/86bd518981b364c138f9901b28a529899d8654f3), it appears to not be included in ROCm v6.0.0. Fixes like this may need to stay around until better solutions come out.
 
 
 <p align="center">
@@ -54,6 +52,8 @@ vLLM is fast with:
 - State-of-the-art serving throughput
 - Efficient management of attention key and value memory with **PagedAttention**
 - Continuous batching of incoming requests
+- Fast model execution with CUDA/HIP graph
+- Quantization: [GPTQ](https://arxiv.org/abs/2210.17323), [AWQ](https://arxiv.org/abs/2306.00978), [SqueezeLLM](https://arxiv.org/abs/2306.07629)
 - Optimized CUDA kernels
 
 vLLM is flexible and easy to use with:
@@ -63,7 +63,7 @@ vLLM is flexible and easy to use with:
 - Tensor parallelism support for distributed inference
 - Streaming outputs
 - OpenAI-compatible API server
-- Support NVIDIA CUDA and AMD ROCm.
+- Support NVIDIA GPUs and AMD GPUs
 
 vLLM seamlessly supports many Hugging Face models, including the following architectures:
 
@@ -71,6 +71,7 @@ vLLM seamlessly supports many Hugging Face models, including the following archi
 - Baichuan & Baichuan2 (`baichuan-inc/Baichuan2-13B-Chat`, `baichuan-inc/Baichuan-7B`, etc.)
 - BLOOM (`bigscience/bloom`, `bigscience/bloomz`, etc.)
 - ChatGLM (`THUDM/chatglm2-6b`, `THUDM/chatglm3-6b`, etc.)
+- DeciLM (`Deci/DeciLM-7B`, `Deci/DeciLM-7B-instruct`, etc.)
 - Falcon (`tiiuae/falcon-7b`, `tiiuae/falcon-40b`, `tiiuae/falcon-rw-7b`, etc.)
 - GPT-2 (`gpt2`, `gpt2-xl`, etc.)
 - GPT BigCode (`bigcode/starcoder`, `bigcode/gpt_bigcode-santacoder`, etc.)
@@ -79,9 +80,10 @@ vLLM seamlessly supports many Hugging Face models, including the following archi
 - InternLM (`internlm/internlm-7b`, `internlm/internlm-chat-7b`, etc.)
 - LLaMA & LLaMA-2 (`meta-llama/Llama-2-70b-hf`, `lmsys/vicuna-13b-v1.3`, `young-geng/koala`, `openlm-research/open_llama_13b`, etc.)
 - Mistral (`mistralai/Mistral-7B-v0.1`, `mistralai/Mistral-7B-Instruct-v0.1`, etc.)
+- Mixtral (`mistralai/Mixtral-8x7B-v0.1`, `mistralai/Mixtral-8x7B-Instruct-v0.1`, etc.)
 - MPT (`mosaicml/mpt-7b`, `mosaicml/mpt-30b`, etc.)
 - OPT (`facebook/opt-66b`, `facebook/opt-iml-max-30b`, etc.)
-- Phi-1.5 (`microsoft/phi-1_5`, etc.)
+- Phi (`microsoft/phi-1_5`, `microsoft/phi-2`, etc.)
 - Qwen (`Qwen/Qwen-7B`, `Qwen/Qwen-7B-Chat`, etc.)
 - Yi (`01-ai/Yi-6B`, `01-ai/Yi-34B`, etc.)
 

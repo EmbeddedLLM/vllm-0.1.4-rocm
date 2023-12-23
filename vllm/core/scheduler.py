@@ -37,7 +37,6 @@ class SchedulerOutputs:
         blocks_to_swap_out: Dict[int, int],
         blocks_to_copy: Dict[int, List[int]],
         ignored_seq_groups: List[SequenceGroup],
-        lora_enabled: bool = False,
     ) -> None:
         self.scheduled_seq_groups = scheduled_seq_groups
         self.prompt_run = prompt_run
@@ -49,8 +48,8 @@ class SchedulerOutputs:
         assert not (blocks_to_swap_in and blocks_to_swap_out)
         self.ignored_seq_groups = ignored_seq_groups
 
-        if lora_enabled:
-            self.num_loras = len(set(self.lora_requests))
+        self.num_loras = len(self.lora_requests)
+        if self.num_loras > 0:
             self._sort_by_lora_ids()
 
     def is_empty(self) -> bool:
@@ -164,15 +163,17 @@ class Scheduler:
             # are added to the back.
             waiting_indices_to_remove = []
             for i, seq_group in enumerate(self.waiting):
-                assert seq_group.num_seqs() == 1, (
+                waiting_seqs = seq_group.get_seqs(
+                    status=SequenceStatus.WAITING)
+                assert len(waiting_seqs) == 1, (
                     "Waiting sequence group should have only one prompt "
                     "sequence.")
-                num_prompt_tokens = seq_group.get_seqs()[0].get_len()
+                num_prompt_tokens = waiting_seqs[0].get_len()
                 if num_prompt_tokens > self.prompt_limit:
                     logger.warning(
                         f"Input prompt ({num_prompt_tokens} tokens) is too long"
                         f" and exceeds limit of {self.prompt_limit}")
-                    for seq in seq_group.get_seqs():
+                    for seq in waiting_seqs:
                         seq.status = SequenceStatus.FINISHED_IGNORED
                     ignored_seq_groups.append(seq_group)
                     waiting_indices_to_remove.append(i)
@@ -186,7 +187,7 @@ class Scheduler:
                     logger.warning(
                         f"Input prompt ({num_prompt_tokens} tokens) is too long"
                         f" and exceeds the capacity of block_manager")
-                    for seq in seq_group.get_seqs():
+                    for seq in waiting_seqs:
                         seq.status = SequenceStatus.FINISHED_IGNORED
                     ignored_seq_groups.append(seq_group)
                     waiting_indices_to_remove.append(i)
@@ -241,7 +242,6 @@ class Scheduler:
                     blocks_to_swap_out=blocks_to_swap_out,
                     blocks_to_copy=blocks_to_copy,
                     ignored_seq_groups=ignored_seq_groups,
-                    lora_enabled=self.lora_enabled,
                 )
                 return scheduler_outputs
 
@@ -332,7 +332,6 @@ class Scheduler:
             blocks_to_swap_out=blocks_to_swap_out,
             blocks_to_copy=blocks_to_copy,
             ignored_seq_groups=[],
-            lora_enabled=self.lora_enabled,
         )
         return scheduler_outputs
 
@@ -377,7 +376,7 @@ class Scheduler:
 
     def _allocate(self, seq_group: SequenceGroup) -> None:
         self.block_manager.allocate(seq_group)
-        for seq in seq_group.get_seqs():
+        for seq in seq_group.get_seqs(status=SequenceStatus.WAITING):
             seq.status = SequenceStatus.RUNNING
 
     def _append_slot(

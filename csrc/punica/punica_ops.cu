@@ -1,19 +1,11 @@
 #include <torch/extension.h>
 #include <ATen/cuda/CUDAContext.h>
 
-#ifndef USE_ROCM
-#include <cuda_bf16.h>
-#include <cuda_fp16.h>
-#else
-#include <hip/hip_bf16.h>
-#include <hip/hip_fp16.h>
-#endif
-
 #include <cstdint>
 
-#include "bgmv/bgmv_config.h"
-#include "../cuda_compat.h"
 #include "type_convert.h"
+#include "../cuda_compat.h"
+#include "bgmv/bgmv_config.h"
 
 //====== utils ======
 

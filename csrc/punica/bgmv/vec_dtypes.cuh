@@ -1,13 +1,6 @@
 #ifndef VEC_DTYPES_CUH_
 #define VEC_DTYPES_CUH_
 
-#ifndef USE_ROCM
-#include <cuda_bf16.h>
-#include <cuda_fp16.h>
-#else
-#include <hip/hip_bf16.h>
-#include <hip/hip_fp16.h>
-#endif
 #ifdef FLASHINFER_USE_FP8
 #include <cuda_fp8.h>
 #endif
@@ -15,10 +8,8 @@
 
 #include <type_traits>
 
-#ifdef USE_ROCM
-#include "../../cuda_compat.h"
 #include "../type_convert.h"
-#endif
+#include "../../cuda_compat.h"
 
 #define FLASHINFER_INLINE \
   inline __attribute__((always_inline)) __device__ __host__
