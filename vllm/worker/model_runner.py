@@ -19,10 +19,6 @@ logger = init_logger(__name__)
 
 KVCache = Tuple[torch.Tensor, torch.Tensor]
 _PAD_SLOT_ID = -1
-# Capture graphs for batch size 1, 2, 4, 8, 16, 24, 32, 40, ..., 256.
-# NOTE: _get_graph_batch_size needs to be updated if this list is changed.
-_BATCH_SIZES_TO_CAPTURE = [1, 2, 4] + [8 * i for i in range(1, 33)]
-
 LORA_WARMUP_RANK = 8
 # Capture graphs for batch size 1, 2, 4, 8, 16, 24, 32, 40, ..., 256.
 # NOTE: _get_graph_batch_size needs to be updated if this list is changed.
@@ -76,7 +72,8 @@ class ModelRunner:
         if self.lora_config:
             self.lora_manager = LRUCacheWorkerLoRAManager(
                 self.scheduler_config.max_num_seqs,
-                self.scheduler_config.max_num_batched_tokens, vocab_size,
+                self.scheduler_config.max_num_batched_tokens +
+                self.scheduler_config.max_paddings, vocab_size,
                 self.lora_config, self.device)
             self.model = self.lora_manager.create_lora_manager(self.model)
 
@@ -279,6 +276,7 @@ class ModelRunner:
                                     dtype=torch.int,
                                     device=device,
                                     pin_memory=pin_memory)
+        
         if use_captured_graph:
             # The shape of graph_block_tables is
             # [max batch size, max context len // block size].
@@ -483,74 +481,32 @@ class ModelRunner:
         self.execute_model(seqs, kv_caches)
         torch.cuda.synchronize()
         return
-    
-    @torch.inference_mode()
-    def capture_model(self, kv_caches: List[KVCache]) -> None:
-        assert not self.model_config.enforce_eager
-        logger.info("Capturing the model for CUDA graphs. This may lead to "
-                    "unexpected consequences if the model is not static. To "
-                    "run the model in eager mode, set 'enforce_eager=True' or "
-                    "use '--enforce-eager' in the CLI.")
-        logger.info("CUDA graphs can take additional 1~3 GiB memory per GPU. "
-                    "If you are running out of memory, consider decreasing "
-                    "`gpu_memory_utilization` or enforcing eager mode.")
-        start_time = time.perf_counter()
-
-        # Prepare dummy inputs. These will be reused for all batch sizes.
-        max_batch_size = max(_BATCH_SIZES_TO_CAPTURE)
-        input_tokens = torch.zeros(max_batch_size, 1, dtype=torch.long).cuda()
-        input_positions = torch.zeros(max_batch_size, 1,
-                                      dtype=torch.long).cuda()
-        slot_mapping = torch.empty(max_batch_size, 1, dtype=torch.long).cuda()
-        slot_mapping.fill_(_PAD_SLOT_ID)
-        context_lens = torch.ones(max_batch_size, dtype=torch.int32).cuda()
-        block_tables = torch.from_numpy(self.graph_block_tables).cuda()
-
-        # NOTE: Capturing the largest batch size first may help reduce the
-        # memory usage of CUDA graph.
-        for batch_size in reversed(_BATCH_SIZES_TO_CAPTURE):
-            # Create dummy input_metadata.
-            input_metadata = InputMetadata(
-                prompt_lens=[],
-                slot_mapping=slot_mapping[:batch_size],
-                max_context_len=self.max_context_len_to_capture,
-                context_lens=context_lens[:batch_size],
-                block_tables=block_tables[:batch_size],
-                use_cuda_graph=True,
-            )
-
-            graph_runner = CUDAGraphRunner(self.model)
-            graph_runner.capture(
-                input_tokens[:batch_size],
-                input_positions[:batch_size],
-                kv_caches,
-                input_metadata,
-                memory_pool=self.graph_memory_pool,
-            )
-            self.graph_memory_pool = graph_runner.graph.pool()
-            self.graph_runners[batch_size] = graph_runner
-
-        end_time = time.perf_counter()
-        elapsed_time = end_time - start_time
-        # This usually takes < 10 seconds.
-        logger.info(f"Graph capturing finished in {elapsed_time:.0f} secs.")
 
     def remove_all_loras(self) -> bool:
-        return self.lora_manager is not None and self.lora_manager.remove_all_loras()
+        if not self.lora_manager:
+            raise RuntimeError("LoRA is not enabled.")
+        return self.lora_manager.remove_all_loras()
 
     def set_active_loras(self, lora_requests: List[LoRARequest],
                          lora_mapping: LoRAMapping) -> None:
-        if self.lora_manager is not None:
-            self.lora_manager.set_active_loras(lora_requests, lora_mapping)
+        if not self.lora_manager:
+            raise RuntimeError("LoRA is not enabled.")
+        self.lora_manager.set_active_loras(lora_requests, lora_mapping)
 
     def add_lora(self, lora_request: LoRARequest) -> bool:
-        return self.lora_manager is not None and self.lora_manager.add_lora(lora_request)
+        if not self.lora_manager:
+            raise RuntimeError("LoRA is not enabled.")
+        return self.lora_manager.add_lora(lora_request)
 
     def remove_lora(self, lora_id: int) -> bool:
-        return self.lora_manager is not None and self.lora_manager.remove_lora(lora_id)
+        if not self.lora_manager:
+            raise RuntimeError("LoRA is not enabled.")
+        return self.lora_manager.remove_lora(lora_id)
 
     def list_loras(self) -> Set[int]:
-        return self.lora_manager is not None and self.lora_manager.list_loras()
+        if not self.lora_manager:
+            raise RuntimeError("LoRA is not enabled.")
+        return self.lora_manager.list_loras()
 
     @torch.inference_mode()
     def capture_model(self, kv_caches: List[KVCache]) -> None:
@@ -587,6 +543,13 @@ class ModelRunner:
                 use_cuda_graph=True,
             )
 
+            if self.lora_config:
+                lora_mapping = LoRAMapping(
+                    [0] * batch_size,
+                    [0] * batch_size,
+                )
+                self.set_active_loras(set(), lora_mapping)
+
             graph_runner = CUDAGraphRunner(self.model)
             graph_runner.capture(
                 input_tokens[:batch_size],
@@ -602,87 +565,6 @@ class ModelRunner:
         elapsed_time = end_time - start_time
         # This usually takes < 10 seconds.
         logger.info(f"Graph capturing finished in {elapsed_time:.0f} secs.")
-
-
-class CUDAGraphRunner:
-
-    def __init__(self, model: nn.Module):
-        self.model = model
-        self.graph = None
-        self.input_buffers: Dict[str, torch.Tensor] = {}
-        self.output_buffers: Dict[str, torch.Tensor] = {}
-
-    def capture(
-        self,
-        input_ids: torch.Tensor,
-        positions: torch.Tensor,
-        kv_caches: List[KVCache],
-        input_metadata: InputMetadata,
-        memory_pool,
-    ) -> None:
-        assert self.graph is None
-        # Run the model once without capturing the graph.
-        # This is to make sure that the captured graph does not include the
-        # kernel launches for initial benchmarking (e.g., Triton autotune).
-        self.model(
-            input_ids,
-            positions,
-            kv_caches,
-            input_metadata,
-        )
-        torch.cuda.synchronize()
-
-        # Capture the graph.
-        self.graph = torch.cuda.CUDAGraph()
-        with torch.cuda.graph(self.graph, pool=memory_pool):
-            hidden_states = self.model(
-                input_ids,
-                positions,
-                kv_caches,
-                input_metadata,
-            )
-        torch.cuda.synchronize()
-
-        # Save the input and output buffers.
-        self.input_buffers = {
-            "input_ids": input_ids,
-            "positions": positions,
-            "kv_caches": kv_caches,
-            "slot_mapping": input_metadata.slot_mapping,
-            "context_lens": input_metadata.context_lens,
-            "block_tables": input_metadata.block_tables,
-        }
-        self.output_buffers = {"hidden_states": hidden_states}
-        return
-
-    def forward(
-        self,
-        input_ids: torch.Tensor,
-        positions: torch.Tensor,
-        kv_caches: List[Tuple[torch.Tensor, torch.Tensor]],
-        input_metadata: InputMetadata,
-    ) -> torch.Tensor:
-        # KV caches are fixed tensors, so we don't need to copy them.
-        del kv_caches
-
-        # Copy the input tensors to the input buffers.
-        self.input_buffers["input_ids"].copy_(input_ids, non_blocking=True)
-        self.input_buffers["positions"].copy_(positions, non_blocking=True)
-        self.input_buffers["slot_mapping"].copy_(input_metadata.slot_mapping,
-                                                 non_blocking=True)
-        self.input_buffers["context_lens"].copy_(input_metadata.context_lens,
-                                                 non_blocking=True)
-        self.input_buffers["block_tables"].copy_(input_metadata.block_tables,
-                                                 non_blocking=True)
-
-        # Run the graph.
-        self.graph.replay()
-
-        # Return the output tensor.
-        return self.output_buffers["hidden_states"]
-
-    def __call__(self, *args, **kwargs):
-        return self.forward(*args, **kwargs)
 
 
 class CUDAGraphRunner:
