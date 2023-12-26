@@ -18,21 +18,10 @@
 namespace cg = cooperative_groups;
 
 #ifdef USE_ROCM
-__host__ __device__
-inline void* memcpy_blocking(void *dst, const void *src, size_t len) {
-  // Does not handle the case of long datatypes
-  char *d = reinterpret_cast<char *>(dst);
-  const char *s = reinterpret_cast<const char *>(src);
-  size_t i = 0;
-  for (i = 0; i < len; ++i) {
-    d[i] = s[i];
-  }
-  return dst;
-}
 
 template <size_t len>
 __host__ __device__
-inline void* memcpy_blocking_unroll(void *dst, const void *src) {
+inline void* memcpy_blocking(void *dst, const void *src) {
   // Does not handle the case of long datatypes
   char *d = reinterpret_cast<char *>(dst);
   const char *s = reinterpret_cast<const char *>(src);
@@ -86,10 +75,10 @@ bgmv_shrink_kernel(out_T *__restrict__ Y, const in_T *__restrict__ X,
                      cuda::aligned_size_t<X_copy_size>(X_copy_size), pipe);
   pipe.producer_commit();
 #else
-  memcpy_blocking_unroll<W_copy_size>(W_shared + (threadIdx.y * tx + threadIdx.x) * vec_size,
+  memcpy_blocking<W_copy_size>(W_shared + (threadIdx.y * tx + threadIdx.x) * vec_size,
                                       W + (idx * feat_out + j) * feat_in +
                                           (threadIdx.y * tx + threadIdx.x) * vec_size);
-  memcpy_blocking_unroll<X_copy_size>(X_shared + (threadIdx.y * tx + threadIdx.x) * vec_size,
+  memcpy_blocking<X_copy_size>(X_shared + (threadIdx.y * tx + threadIdx.x) * vec_size,
                                       X + (batch_idx * feat_in) +
                                           (threadIdx.y * tx + threadIdx.x) * vec_size);
 #endif
@@ -122,12 +111,12 @@ bgmv_shrink_kernel(out_T *__restrict__ Y, const in_T *__restrict__ X,
     pipe.producer_commit();
 #else
     if (tile_idx * tile_size + threadIdx.y * tx * vec_size < feat_in) {
-      memcpy_blocking_unroll<W_copy_size>(W_shared + W_shared_offset[copy_idx] +
+      memcpy_blocking<W_copy_size>(W_shared + W_shared_offset[copy_idx] +
                                               (threadIdx.y * tx + threadIdx.x) * vec_size,
                                           W + (idx * feat_out + j) * feat_in +
                                               tile_idx * tile_size +
                                               (threadIdx.y * tx + threadIdx.x) * vec_size);
-      memcpy_blocking_unroll<X_copy_size>(X_shared + X_shared_offset[copy_idx] +
+      memcpy_blocking<X_copy_size>(X_shared + X_shared_offset[copy_idx] +
                                               (threadIdx.y * tx + threadIdx.x) * vec_size,
                                           X + (batch_idx * feat_in) + tile_idx * tile_size +
                                               (threadIdx.y * tx + threadIdx.x) * vec_size);

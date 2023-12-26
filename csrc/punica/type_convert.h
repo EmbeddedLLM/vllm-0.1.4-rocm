@@ -15,9 +15,7 @@
 
 typedef __half nv_half;
 typedef __hip_bfloat16 nv_bfloat16;
-
 typedef __hip_bfloat162 nv_bfloat162;
-//typedef __hip_bfloat16 nv_bfloat16;
 
 __TYPE_CONVERT__HOST_DEVICE__
 inline __hip_bfloat162 make_bfloat162(__hip_bfloat16 val) {
@@ -27,51 +25,6 @@ inline __hip_bfloat162 make_bfloat162(__hip_bfloat16 val) {
 __TYPE_CONVERT__HOST_DEVICE__
 inline __hip_bfloat162 make_bfloat162(__hip_bfloat16 vall, __hip_bfloat16 valr) {
   return __hip_bfloat162{vall, valr};
-}
-
-__TYPE_CONVERT__HOST_DEVICE__
-inline __half cast_to_half(__half val) {
-  return val;
-}
-
-__TYPE_CONVERT__HOST_DEVICE__
-inline __half cast_to_half(__hip_bfloat16 val) {
-  return __float2half(__bfloat162float(val));
-}
-
-__TYPE_CONVERT__HOST_DEVICE__
-inline __half cast_to_half(float val) {
-  return __float2half(val);
-}
-
-__TYPE_CONVERT__HOST_DEVICE__
-inline __hip_bfloat16 cast_to_bf16(__half val) {
-  return __float2bfloat16(__half2float(val));
-}
-
-__TYPE_CONVERT__HOST_DEVICE__
-inline __hip_bfloat16 cast_to_bf16(__hip_bfloat16 val) {
-  return val;
-}
-
-__TYPE_CONVERT__HOST_DEVICE__
-inline __hip_bfloat16 cast_to_bf16(float val) {
-  return __float2bfloat16(val);
-}
-
-__TYPE_CONVERT__HOST_DEVICE__
-inline float cast_to_float(__half val) {
-  return __half2float(val);
-}
-
-__TYPE_CONVERT__HOST_DEVICE__
-inline float cast_to_float(__hip_bfloat16 val) {
-  return __bfloat162float(val);
-}
-
-__TYPE_CONVERT__HOST_DEVICE__
-inline float cast_to_float(float val) {
-  return val;
 }
 
 template <typename T_src, typename T_dst>
