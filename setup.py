@@ -346,17 +346,6 @@ if _is_cuda():
         "csrc/quantization/marlin/marlin_cuda_kernel.cu")
     vllm_extension_sources.append("csrc/custom_all_reduce.cu")
 
-    # Add MoE kernels.
-    ext_modules.append(
-        CUDAExtension(
-            name="vllm._moe_C",
-            sources=glob("csrc/moe/*.cu") + glob("csrc/moe/*.cpp"),
-            extra_compile_args={
-                "cxx": CXX_FLAGS,
-                "nvcc": NVCC_FLAGS,
-            },
-        ))
-
 if not _is_neuron():
     vllm_extension = CUDAExtension(
         name="vllm._C",
@@ -368,6 +357,17 @@ if not _is_neuron():
         libraries=["cuda"] if _is_cuda() else [],
     )
     ext_modules.append(vllm_extension)
+
+    # Add MoE kernels.
+    ext_modules.append(
+        CUDAExtension(
+            name="vllm._moe_C",
+            sources=glob("csrc/moe/*.cu") + glob("csrc/moe/*.cpp"),
+            extra_compile_args={
+                "cxx": CXX_FLAGS,
+                "nvcc": NVCC_FLAGS,
+            },
+        ))
 
 
 def get_path(*filepath) -> str:
