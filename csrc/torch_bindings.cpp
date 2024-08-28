@@ -108,7 +108,6 @@ TORCH_LIBRARY_EXPAND(TORCH_EXTENSION_NAME, ops) {
   ops.impl("batched_rotary_embedding", torch::kCUDA, &batched_rotary_embedding);
 
   // Quantization ops
-#ifndef USE_ROCM
   // Quantized GEMM for AQLM.
   ops.def("aqlm_gemm", &aqlm_gemm);
   ops.impl("aqlm_gemm", torch::kCUDA, &aqlm_gemm);
@@ -117,6 +116,7 @@ TORCH_LIBRARY_EXPAND(TORCH_EXTENSION_NAME, ops) {
   ops.def("aqlm_dequant", &aqlm_dequant);
   ops.impl("aqlm_dequant", torch::kCUDA, &aqlm_dequant);
 
+#ifndef USE_ROCM
   // Quantized GEMM for AWQ.
   ops.def("awq_gemm", &awq_gemm);
   ops.impl("awq_gemm", torch::kCUDA, &awq_gemm);

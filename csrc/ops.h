@@ -59,7 +59,6 @@ void advance_step(int64_t num_seqs, int64_t num_queries, int64_t block_size,
                   torch::Tensor& input_positions, torch::Tensor& seq_lens,
                   torch::Tensor& slot_mapping, torch::Tensor& block_tables);
 
-#ifndef USE_ROCM
 torch::Tensor aqlm_gemm(const torch::Tensor& input, const torch::Tensor& codes,
                         const torch::Tensor& codebooks,
                         const torch::Tensor& scales,
@@ -70,6 +69,7 @@ torch::Tensor aqlm_dequant(
     const torch::Tensor& codes, const torch::Tensor& codebooks,
     const std::vector<int64_t>& codebook_partition_sizes);
 
+#ifndef USE_ROCM
 torch::Tensor awq_gemm(torch::Tensor _in_feats, torch::Tensor _kernel,
                        torch::Tensor _scaling_factors, torch::Tensor _zeros,
                        int64_t split_k_iters);

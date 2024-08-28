@@ -25,6 +25,8 @@
 #include <iostream>
 #include <cstdlib>
 
+#include "cuda_compat.h"
+
 namespace vllm {
 namespace aqlm {
 
@@ -37,7 +39,7 @@ __global__ void Code1x16MatVec(
     const int codebook_stride     // as int4.
 ) {
   int a_gl_stride = prob_k / 8 / 8;
-  int a_gl_rd = (blockDim.x / 32) * blockIdx.x + (threadIdx.x / 32);
+  int a_gl_rd = (blockDim.x / WARP_SIZE) * blockIdx.x + (threadIdx.x / WARP_SIZE);
   bool pred = a_gl_rd < prob_m;
 
   if (pred) {
@@ -52,33 +54,37 @@ __global__ void Code1x16MatVec(
 
   int b_gl_rd = 0;
   int c_gl_wr = a_gl_rd;
-  a_gl_rd = a_gl_stride * a_gl_rd + threadIdx.x % 32;
-  int a_gl_end = a_gl_rd + a_gl_stride - threadIdx.x % 32;
+  a_gl_rd = a_gl_stride * a_gl_rd + threadIdx.x % WARP_SIZE;
+  int a_gl_end = a_gl_rd + a_gl_stride - threadIdx.x % WARP_SIZE;
 
-  __shared__ int4 sh_b[32 * 9];
+  __shared__ int4 sh_b[WARP_SIZE * 9];
   float res = 0;
 
-  int iters = (prob_k / 8 + 8 * 32 - 1) / (8 * 32);
+  int iters = (prob_k / 8 + 8 * WARP_SIZE - 1) / (8 * WARP_SIZE);
   while (iters--) {
     // We pad shared memory to avoid bank conflicts during reads
     __syncthreads();
-    for (int i = threadIdx.x; i < 32 * 8; i += blockDim.x) {
+    for (int i = threadIdx.x; i < WARP_SIZE * 8; i += blockDim.x) {
       if (b_gl_rd + i < prob_k / 8) sh_b[9 * (i / 8) + i % 8] = B[b_gl_rd + i];
     }
     __syncthreads();
-    b_gl_rd += 32 * 8;
+    b_gl_rd += WARP_SIZE * 8;
 
-    int b_sh_rd = 9 * (threadIdx.x % 32);
+    int b_sh_rd = 9 * (threadIdx.x % WARP_SIZE);
     if (pred && a_gl_rd < a_gl_end) {
       const uint16_t* enc = reinterpret_cast<const uint16_t*>(&A[a_gl_rd]);
 #pragma unroll
       for (int i = 0; i < 8; i++) {
+#ifndef USE_ROCM
         uint32_t dec[4];
         // We bypass the L1 cache to avoid massive amounts of memory streaming
         // that doesn't actually help us; this brings > 2x speedup.
         asm volatile("ld.cg.global.v4.u32 {%0, %1, %2, %3}, [%4];"
                      : "=r"(dec[0]), "=r"(dec[1]), "=r"(dec[2]), "=r"(dec[3])
                      : "l"((void*)&codebook[enc[i]]));
+#else
+        int4 dec = codebook[enc[i]];
+#endif
         half2* a = reinterpret_cast<half2*>(&dec);
         half2* b = reinterpret_cast<half2*>(&sh_b[b_sh_rd]);
         half2 res2 = {};
@@ -87,14 +93,14 @@ __global__ void Code1x16MatVec(
         res += __half2float(res2.x) + __half2float(res2.y);
         b_sh_rd++;
       }
-      a_gl_rd += 32;
+      a_gl_rd += WARP_SIZE;
     }
   }
 
   if (pred) {
 #pragma unroll
-    for (int i = 16; i > 0; i /= 2) res += __shfl_down_sync(0xffffffff, res, i);
-    if (threadIdx.x % 32 == 0)
+    for (int i = WARP_SIZE / 2; i > 0; i /= 2) res += VLLM_SHFL_DOWN_SYNC(res, i);
+    if (threadIdx.x % WARP_SIZE == 0)
       reinterpret_cast<__half*>(C)[c_gl_wr] = __float2half(res);
   }
 }
@@ -109,7 +115,7 @@ __global__ void Code2x8MatVec(
 
 ) {
   int a_gl_stride = prob_k / 8 / 8;
-  int a_gl_rd = (blockDim.x / 32) * blockIdx.x + (threadIdx.x / 32);
+  int a_gl_rd = (blockDim.x / WARP_SIZE) * blockIdx.x + (threadIdx.x / WARP_SIZE);
   bool pred = a_gl_rd < prob_m;
 
   if (pred) {
@@ -124,17 +130,17 @@ __global__ void Code2x8MatVec(
 
   int b_gl_rd = 0;
   int c_gl_wr = a_gl_rd;
-  a_gl_rd = a_gl_stride * a_gl_rd + threadIdx.x % 32;
-  int a_gl_end = a_gl_rd + a_gl_stride - threadIdx.x % 32;
+  a_gl_rd = a_gl_stride * a_gl_rd + threadIdx.x % WARP_SIZE;
+  int a_gl_end = a_gl_rd + a_gl_stride - threadIdx.x % WARP_SIZE;
   int lane = threadIdx.x % 8;
 
   extern __shared__ int4 sh[];
   int4* sh_b = sh;
-  int4* sh_code = sh_b + 32 * 9;
+  int4* sh_code = sh_b + WARP_SIZE * 9;
   int4* sh_code0 = sh_code;
-  int4* sh_code1 = sh_code + 256 * 8;
+  int4* sh_code1 = sh_code + WARP_SIZE * 8 * 8;
 
-  for (int i = threadIdx.x; i < 2 * 256; i += blockDim.x) {
+  for (int i = threadIdx.x; i < 2 * WARP_SIZE * 8; i += blockDim.x) {
     int4 dec = codebook[i];
 #pragma unroll
     for (int j = 0; j < 8; j++) sh_code[8 * i + (j + lane) % 8] = dec;
@@ -143,17 +149,17 @@ __global__ void Code2x8MatVec(
 
   float res = 0;
 
-  int iters = (prob_k / 8 + 8 * 32 - 1) / (8 * 32);
+  int iters = (prob_k / 8 + 8 * WARP_SIZE - 1) / (8 * WARP_SIZE);
   while (iters--) {
     // We pad shared memory to avoid bank conflicts during reads
     __syncthreads();
-    for (int i = threadIdx.x; i < 32 * 8; i += blockDim.x) {
+    for (int i = threadIdx.x; i < WARP_SIZE * 8; i += blockDim.x) {
       if (b_gl_rd + i < prob_k / 8) sh_b[9 * (i / 8) + i % 8] = B[b_gl_rd + i];
     }
     __syncthreads();
-    b_gl_rd += 32 * 8;
+    b_gl_rd += WARP_SIZE * 8;
 
-    int b_sh_rd = 9 * (threadIdx.x % 32);
+    int b_sh_rd = 9 * (threadIdx.x % WARP_SIZE);
     if (pred && a_gl_rd < a_gl_end) {
       const uint8_t* enc = reinterpret_cast<const uint8_t*>(&A[a_gl_rd]);
 #pragma unroll
@@ -170,14 +176,14 @@ __global__ void Code2x8MatVec(
         res += __half2float(res2.x) + __half2float(res2.y);
         b_sh_rd++;
       }
-      a_gl_rd += 32;
+      a_gl_rd += WARP_SIZE;
     }
   }
 
   if (pred) {
 #pragma unroll
-    for (int i = 16; i > 0; i /= 2) res += __shfl_down_sync(0xffffffff, res, i);
-    if (threadIdx.x % 32 == 0)
+    for (int i = WARP_SIZE / 2; i > 0; i /= 2) res += VLLM_SHFL_DOWN_SYNC(res, i);
+    if (threadIdx.x % WARP_SIZE == 0)
       reinterpret_cast<__half*>(C)[c_gl_wr] = __float2half(res);
   }
 }
@@ -190,7 +196,7 @@ __global__ void Code1x16Dequant(
     const int codebook_stride     // as int4
 ) {
   int a_gl_stride = prob_k / 8 / 8;
-  int a_gl_rd = (blockDim.x / 32) * blockIdx.x + (threadIdx.x / 32);
+  int a_gl_rd = (blockDim.x / WARP_SIZE) * blockIdx.x + (threadIdx.x / WARP_SIZE);
   bool pred = a_gl_rd < prob_m;
 
   if (pred) {
@@ -203,19 +209,20 @@ __global__ void Code1x16Dequant(
     }
   }
 
-  a_gl_rd = a_gl_stride * a_gl_rd + threadIdx.x % 32;
-  int a_gl_end = a_gl_rd + a_gl_stride - threadIdx.x % 32;
+  a_gl_rd = a_gl_stride * a_gl_rd + threadIdx.x % WARP_SIZE;
+  int a_gl_end = a_gl_rd + a_gl_stride - threadIdx.x % WARP_SIZE;
 
   int c_gl_stride = prob_k / 8;
-  int c_gl_wr = (blockDim.x / 32) * blockIdx.x + (threadIdx.x / 32);
-  c_gl_wr = c_gl_stride * c_gl_wr + (threadIdx.x % 32) * 8;
+  int c_gl_wr = (blockDim.x / WARP_SIZE) * blockIdx.x + (threadIdx.x / WARP_SIZE);
+  c_gl_wr = c_gl_stride * c_gl_wr + (threadIdx.x % WARP_SIZE) * 8;
 
-  int iters = (prob_k / 8 - 1) / (8 * 32) + 1;
+  int iters = (prob_k / 8 - 1) / (8 * WARP_SIZE) + 1;
   while (iters--) {
     if (pred && a_gl_rd < a_gl_end) {
       const uint16_t* enc = reinterpret_cast<const uint16_t*>(&A[a_gl_rd]);
 #pragma unroll
       for (int i = 0; i < 8; i++) {
+#ifndef USE_ROCM
         int4 chunk;
         auto dec = reinterpret_cast<uint32_t*>(&chunk);
         // We bypass the L1 cache to avoid massive amounts of memory streaming
@@ -225,9 +232,12 @@ __global__ void Code1x16Dequant(
                      : "l"((void*)&codebook[enc[i]]));
 
         C[a_gl_rd * 8 + i] = chunk;
+#else
+        C[a_gl_rd * 8 + i] = codebook[enc[i]];
+#endif
       }
     }
-    a_gl_rd += 32;
+    a_gl_rd += WARP_SIZE;
   }
 }
 
@@ -240,7 +250,7 @@ __global__ void Code2x8Dequant(
     const int codebook_stride  // as int4
 ) {
   int a_gl_stride = prob_k / 8 / 8;
-  int a_gl_rd = (blockDim.x / 32) * blockIdx.x + (threadIdx.x / 32);
+  int a_gl_rd = (blockDim.x / WARP_SIZE) * blockIdx.x + (threadIdx.x / WARP_SIZE);
   bool pred = a_gl_rd < prob_m;
 
   if (pred) {
@@ -253,27 +263,27 @@ __global__ void Code2x8Dequant(
     }
   }
 
-  a_gl_rd = a_gl_stride * a_gl_rd + threadIdx.x % 32;
-  int a_gl_end = a_gl_rd + a_gl_stride - threadIdx.x % 32;
+  a_gl_rd = a_gl_stride * a_gl_rd + threadIdx.x % WARP_SIZE;
+  int a_gl_end = a_gl_rd + a_gl_stride - threadIdx.x % WARP_SIZE;
   int lane = threadIdx.x % 8;
 
   int c_gl_stride = prob_k / 8;
-  int c_gl_wr = (blockDim.x / 32) * blockIdx.x + (threadIdx.x / 32);
-  c_gl_wr = c_gl_stride * c_gl_wr + (threadIdx.x % 32) * 8;
+  int c_gl_wr = (blockDim.x / WARP_SIZE) * blockIdx.x + (threadIdx.x / WARP_SIZE);
+  c_gl_wr = c_gl_stride * c_gl_wr + (threadIdx.x % WARP_SIZE) * 8;
 
   extern __shared__ int4 sh[];
   int4* sh_code = sh;
   int4* sh_code0 = sh_code;
-  int4* sh_code1 = sh_code + 256 * 8;
+  int4* sh_code1 = sh_code + 8 * WARP_SIZE * 8;
 
-  for (int i = threadIdx.x; i < 2 * 256; i += blockDim.x) {
+  for (int i = threadIdx.x; i < 2 * WARP_SIZE * 8; i += blockDim.x) {
     int4 dec = codebook[i];
 #pragma unroll
     for (int j = 0; j < 8; j++) sh_code[8 * i + (j + lane) % 8] = dec;
   }
   __syncthreads();
 
-  int iters = (prob_k / 8 - 1) / (8 * 32) + 1;
+  int iters = (prob_k / 8 - 1) / (8 * WARP_SIZE) + 1;
   while (iters--) {
     if (pred && a_gl_rd < a_gl_end) {
       const uint8_t* enc = reinterpret_cast<const uint8_t*>(&A[a_gl_rd]);
@@ -290,7 +300,7 @@ __global__ void Code2x8Dequant(
         C[a_gl_rd * 8 + i] = chunk;
       }
     }
-    a_gl_rd += 32;
+    a_gl_rd += WARP_SIZE;
   }
 }
 
@@ -313,9 +323,9 @@ void code1x16_matvec_cuda(const void* __restrict__ A,
   } while (thread_m > THREAD_M);
 
   int blocks = ceildiv(prob_m, thread_m);
-  int threads = 32 * thread_m;
+  int threads = WARP_SIZE * thread_m;
   cudaStream_t stream = at::cuda::getCurrentCUDAStream().stream();
-  Code1x16MatVec<<<blocks, threads, 16 * 32 * 9, stream>>>(
+  Code1x16MatVec<<<blocks, threads, 16 * WARP_SIZE * 9, stream>>>(
       (const int4*)A, (const int4*)B, (int4*)C, (const int4*)codebook, prob_m,
       prob_k, codebook_a_sizes, codebook_stride);
 }
@@ -335,10 +345,9 @@ void code2x8_matvec_cuda(const void* __restrict__ A, const void* __restrict__ B,
   } while (thread_m > THREAD_M);
 
   int blocks = ceildiv(prob_m, thread_m);
-  int threads = 32 * thread_m;
-  int shared = 16 * (2 * 256 * 8 + 32 * 9);
-  cudaFuncSetAttribute(Code2x8MatVec,
-                       cudaFuncAttributeMaxDynamicSharedMemorySize, shared);
+  int threads = WARP_SIZE * thread_m;
+  int shared = 16 * (2 * WARP_SIZE * 8 * 8 + WARP_SIZE * 9);
+  VLLM_DevFuncAttribute_SET_MaxDynamicSharedMemorySize((void*)Code2x8MatVec, shared);
   cudaStream_t stream = at::cuda::getCurrentCUDAStream().stream();
   Code2x8MatVec<<<blocks, threads, shared, stream>>>(
       (const int4*)A, (const int4*)B, (int4*)C, (const int4*)codebook, prob_m,
@@ -362,7 +371,7 @@ void code1x16_dequant_cuda(
   } while (thread_m > THREAD_M);
 
   int blocks = ceildiv(prob_m, thread_m);
-  int threads = 32 * thread_m;
+  int threads = WARP_SIZE * thread_m;
   cudaStream_t stream = at::cuda::getCurrentCUDAStream().stream();
   Code1x16Dequant<<<blocks, threads, 0, stream>>>(
       (const int4*)A, (int4*)C, (const int4*)codebook, prob_m, prob_k,
@@ -391,12 +400,11 @@ void code2x8_dequant_cuda(
   } while (thread_m > THREAD_M);
 
   int blocks = ceildiv(prob_m, thread_m);
-  int threads = 32 * thread_m;
-  int shared = 16 * (2 * 256 * 8 + 32 * 9);
+  int threads = WARP_SIZE * thread_m;
+  int shared = 16 * (2 * WARP_SIZE * 8 * 8 + WARP_SIZE * 9);
   cudaStream_t stream = at::cuda::getCurrentCUDAStream().stream();
 
-  cudaFuncSetAttribute(Code2x8Dequant,
-                       cudaFuncAttributeMaxDynamicSharedMemorySize, shared);
+  VLLM_DevFuncAttribute_SET_MaxDynamicSharedMemorySize((void*)Code2x8Dequant, shared);
   Code2x8Dequant<<<blocks, threads, shared, stream>>>(
       (const int4*)A, (int4*)C, (const int4*)codebook, prob_m, prob_k,
       codebook_a_sizes, codebook_stride);
