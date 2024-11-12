@@ -6,11 +6,10 @@ import torch.nn as nn
 
 from vllm.model_executor import SamplingMetadata
 from vllm.model_executor.layers.logits_processor import LogitsProcessor
-from vllm.model_executor.layers.sampler import Sampler
+from vllm.model_executor.layers.sampler import SamplerOutput, get_sampler
 from vllm.model_executor.layers.vocab_parallel_embedding import (
     ParallelLMHead, VocabParallelEmbedding)
 from vllm.model_executor.model_loader.weight_utils import default_weight_loader
-from vllm.sequence import SamplerOutput
 from vllm.transformers_utils.configs import MLPSpeculatorConfig
 
 SQRT2 = 2**0.5
@@ -38,7 +37,7 @@ class MLPSpeculatorLayerNorm(nn.Module):
         eps=1e-06,
         elementwise_scale_and_shift=True,
     ):
-        super(MLPSpeculatorLayerNorm, self).__init__()
+        super().__init__()
         self.elementwise_scale_and_shift = elementwise_scale_and_shift
         if self.elementwise_scale_and_shift:
             self.weight = nn.Parameter(torch.empty(normalized_shape))
@@ -138,7 +137,7 @@ class MLPSpeculator(nn.Module):
         self.config = config
         self.logits_processor = LogitsProcessor(config.vocab_size,
                                                 config.vocab_size, 1.0)
-        self.sampler = Sampler()
+        self.sampler = get_sampler()
 
     def generate_proposals(
         self,

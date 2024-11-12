@@ -7,13 +7,13 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union
 
 import torch
 
-from vllm.config import ObservabilityConfig
+from vllm.config import ObservabilityConfig, VllmConfig
 from vllm.distributed import broadcast_tensor_dict, get_pp_group, get_tp_group
 from vllm.logger import init_logger
 from vllm.lora.request import LoRARequest
+from vllm.model_executor.layers.sampler import SamplerOutput
 from vllm.platforms import current_platform
-from vllm.sequence import (ExecuteModelRequest, IntermediateTensors,
-                           SamplerOutput)
+from vllm.sequence import ExecuteModelRequest, IntermediateTensors
 from vllm.utils import (enable_trace_function_call_for_thread,
                         update_environment_variables)
 from vllm.worker.model_runner_base import (BroadcastableModelInput,
@@ -28,6 +28,22 @@ class WorkerBase(ABC):
     different hardware. Also abstracts control plane communication, e.g., to
     communicate request metadata to other workers.
     """
+
+    def __init__(
+        self,
+        vllm_config: VllmConfig,
+    ) -> None:
+        self.vllm_config = vllm_config
+        self.model_config = vllm_config.model_config
+        self.cache_config = vllm_config.cache_config
+        self.lora_config = vllm_config.lora_config
+        self.load_config = vllm_config.load_config
+        self.parallel_config = vllm_config.parallel_config
+        self.scheduler_config = vllm_config.scheduler_config
+        self.device_config = vllm_config.device_config
+        self.speculative_config = vllm_config.speculative_config
+        self.prompt_adapter_config = vllm_config.prompt_adapter_config
+        self.observability_config = vllm_config.observability_config
 
     @abstractmethod
     def init_device(self) -> None:
@@ -263,6 +279,11 @@ class LocalOrDistributedWorkerBase(WorkerBase):
             broadcast_data.update(kwargs)
             broadcast_tensor_dict(broadcast_data, src=0)
 
+        if execute_model_req.async_callback:
+            model_input = dataclasses.replace(  # type: ignore
+                model_input,
+                async_callback=execute_model_req.async_callback)
+
         return model_input, worker_input, kwargs
 
     def prepare_input(
@@ -289,7 +310,7 @@ class LocalOrDistributedWorkerBase(WorkerBase):
 
     def execute_model(
         self,
-        execute_model_req: Optional[ExecuteModelRequest] = None
+        execute_model_req: Optional[ExecuteModelRequest] = None,
     ) -> Optional[List[SamplerOutput]]:
         """Executes at least one model step on the given sequences, unless no
         sequences are provided."""
