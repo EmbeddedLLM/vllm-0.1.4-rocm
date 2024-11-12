@@ -409,32 +409,6 @@ if hasattr(torch.ops._C, "gptq_marlin_24_gemm"):
                            dtype=input.dtype,
                            device=input.device).sum(0)
 
-    @register_fake("_C::aqlm_gemm")
-    def _aqlm_gemm_fake(input: torch.Tensor, codes: torch.Tensor,
-                        codebooks: torch.Tensor, scales: torch.Tensor,
-                        codebook_partition_sizes: List[int],
-                        bias: Optional[torch.Tensor]) -> torch.Tensor:
-        out_features = codes.size(0) * codebooks.size(2)
-        flat_input = input.reshape((-1, input.size(-1)))
-        flat_output = torch.empty((flat_input.size(0), out_features),
-                                  dtype=input.dtype,
-                                  device=input.device)
-
-        output_sizes = list(input.shape)
-        output_sizes.pop()
-        output_sizes.append(-1)
-        return flat_output.reshape(tuple(output_sizes))
-
-    @register_fake("_C::aqlm_dequant")
-    def _aqlm_dequant_fake(
-            codes: torch.Tensor, codebooks: torch.Tensor,
-            codebook_partition_sizes: List[int]) -> torch.Tensor:
-        in_features = codes.size(1) * 8
-        out_features = codes.size(0)
-        return torch.empty((out_features, in_features),
-                           dtype=codebooks.dtype,
-                           device=codebooks.device)
-
     @register_fake("_C::fp8_marlin_gemm")
     def _fp8_marlin_gemm_fake(a: torch.Tensor, b_q_weight: torch.Tensor,
                               b_scales: torch.Tensor, workspace: torch.Tensor,
@@ -466,6 +440,35 @@ if hasattr(torch.ops._C, "gptq_marlin_24_gemm"):
                                b_type: ScalarType) -> torch.Tensor:
         return torch.empty_like(b_q_weight,
                                 memory_format=torch.contiguous_format)
+
+
+if hasattr(torch.ops._C, "aqlm_gemm"):
+
+    @register_fake("_C::aqlm_gemm")
+    def _aqlm_gemm_fake(input: torch.Tensor, codes: torch.Tensor,
+                        codebooks: torch.Tensor, scales: torch.Tensor,
+                        codebook_partition_sizes: List[int],
+                        bias: Optional[torch.Tensor]) -> torch.Tensor:
+        out_features = codes.size(0) * codebooks.size(2)
+        flat_input = input.reshape((-1, input.size(-1)))
+        flat_output = torch.empty((flat_input.size(0), out_features),
+                                  dtype=input.dtype,
+                                  device=input.device)
+
+        output_sizes = list(input.shape)
+        output_sizes.pop()
+        output_sizes.append(-1)
+        return flat_output.reshape(tuple(output_sizes))
+
+    @register_fake("_C::aqlm_dequant")
+    def _aqlm_dequant_fake(
+            codes: torch.Tensor, codebooks: torch.Tensor,
+            codebook_partition_sizes: List[int]) -> torch.Tensor:
+        in_features = codes.size(1) * 8
+        out_features = codes.size(0)
+        return torch.empty((out_features, in_features),
+                           dtype=codebooks.dtype,
+                           device=codebooks.device)
 
 
 # cutlass
